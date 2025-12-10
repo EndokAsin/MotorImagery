@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eksperimen Motor Imagery & Execution</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- IMPORT SUPABASE LIBRARY -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a202c; /* Dark background for focus */
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        .center-absolute {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 100%;
+        }
+        .fixation-cross {
+            font-size: 5rem;
+            font-weight: bold;
+            color: white;
+        }
+        /* Custom scrollbar for table */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2d3748; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a5568; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096; 
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HALAMAN SETUP (Awal) -->
+    <div id="setup-screen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+            <h1 class="text-2xl font-bold mb-6 text-center text-blue-400">Konfigurasi Eksperimen</h1>
+            
+            <form id="config-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">ID Subjek / Nama</label>
+                    <input type="text" id="subject-id" required class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none" placeholder="Contoh: S001">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1">Tangan yang Diuji</label>
+                    <select id="hand-selection" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none">
+                        <option value="Kanan">Tangan Kanan (Right Hand)</option>
+                        <option value="Kiri">Tangan Kiri (Left Hand)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1">Jenis Sesi</label>
+                    <select id="session-type" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none">
+                        <option value="ME_Latihan" data-trials="5" data-mode="ME">Latihan Motor Execution (5 Percobaan)</option>
+                        <option value="ME_Utama" data-trials="15" data-mode="ME">Utama Motor Execution (15 Percobaan)</option>
+                        <option value="MI_Latihan" data-trials="5" data-mode="MI">Latihan Motor Imagery (5 Percobaan)</option>
+                        <option value="MI_Utama" data-trials="15" data-mode="MI">Utama Motor Imagery (15 Percobaan)</option>
+                        <option value="Custom_20" data-trials="20" data-mode="ME">Custom Full Session (20 Percobaan - ME)</option>
+                    </select>
+                </div>
+
+                <div class="pt-4 space-y-3">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
+                        Mulai Sesi
+                    </button>
+                    <button type="button" onclick="openDataScreen()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold py-2 px-4 rounded transition duration-200 border border-gray-600">
+                        📂 Lihat Riwayat Sesi
+                    </button>
+                </div>
+            </form>
+            
+            <div class="mt-4 text-xs text-gray-500 text-center">
+                Data disimpan per sesi (Ringkas).
+            </div>
+        </div>
+    </div>
+
+    <!-- HALAMAN DATA (Tabel Hasil - RINGKAS) -->
+    <div id="data-screen" class="hidden min-h-screen p-6 bg-gray-900">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-blue-400">Riwayat Sesi Eksperimen</h2>
+                    <p class="text-gray-400 text-sm">Satu baris mewakili satu sesi penuh.</p>
+                </div>
+                <button onclick="switchScreen('setup')" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded flex items-center gap-2">
+                    <span>← Kembali</span>
+                </button>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden">
+                <div class="overflow-x-auto max-h-[80vh]">
+                    <table class="w-full text-left text-sm text-gray-300">
+                        <thead class="bg-gray-700 text-gray-100 uppercase sticky top-0">
+                            <tr>
+                                <th class="p-4 w-32">Waktu Selesai</th>
+                                <th class="p-4">Subjek ID</th>
+                                <th class="p-4">Jenis Sesi</th>
+                                <th class="p-4">Mode</th>
+                                <th class="p-4">Tangan</th>
+                                <th class="p-4 text-center">Jml Trial</th>
+                                <th class="p-4 text-right">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="data-table-body" class="divide-y divide-gray-700">
+                            <tr>
+                                <td colspan="7" class="p-8 text-center text-gray-500">Memuat data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <p class="mt-2 text-xs text-gray-500 text-right">* Menampilkan 50 sesi terakhir.</p>
+        </div>
+    </div>
+
+    <!-- HALAMAN EKSPERIMEN (Running) -->
+    <div id="experiment-screen" class="hidden h-screen w-screen relative bg-black">
+        <div class="absolute top-0 left-0 w-full h-1 bg-gray-800">
+            <div id="progress-bar" class="h-full bg-blue-500 transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div class="absolute top-2 right-4 text-gray-500 text-sm">
+            Trial: <span id="trial-counter">0</span>/<span id="total-trials">0</span>
+        </div>
+
+        <div class="center-absolute">
+            <div id="fixation" class="hidden">
+                <div class="fixation-cross">+</div>
+            </div>
+            <div id="instruction" class="hidden">
+                <img id="instruction-img" src="" alt="Instruksi" class="mx-auto h-64 object-contain mb-4 rounded-lg border-2 border-gray-600">
+                <h2 id="instruction-text" class="text-3xl font-bold text-yellow-400 uppercase tracking-wider"></h2>
+            </div>
+            <div id="action-phase" class="hidden">
+                <div class="w-32 h-32 rounded-full border-4 border-green-500 flex items-center justify-center mx-auto mb-6 bg-green-900 bg-opacity-20 animate-pulse">
+                    <span class="text-4xl font-bold text-green-400">GO</span>
+                </div>
+                <h2 id="action-text" class="text-4xl font-bold text-white uppercase"></h2>
+            </div>
+            <div id="rest-phase" class="hidden">
+                <h2 class="text-2xl text-gray-400 mb-2">Istirahat</h2>
+                <div class="text-6xl font-mono" id="rest-timer">5</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HALAMAN SELESAI (Result) -->
+    <div id="result-screen" class="hidden min-h-screen flex items-center justify-center p-4">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-lg text-center border border-gray-700">
+            <h2 class="text-3xl font-bold text-green-400 mb-4">Sesi Selesai</h2>
+            
+            <div id="upload-status" class="mb-6 p-3 bg-gray-700 rounded text-sm text-yellow-300">
+                Menyimpan data sesi ke Cloud...
+            </div>
+
+            <p class="mb-6 text-gray-400 text-sm">Seluruh data percobaan dalam sesi ini telah disatukan.</p>
+            
+            <div class="space-y-3">
+                <button onclick="downloadCSV()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                    Unduh CSV Lengkap
+                </button>
+                <button onclick="location.reload()" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">
+                    Kembali ke Menu Utama
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- KONFIGURASI SUPABASE ---
+        const SUPABASE_URL = 'https://rkekwnmwuybxzmbptcwh.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_5p4UmkOLs41OWf97B-He4g_A2MRqC7T'; 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- KONFIGURASI GAMBAR ---
+        const IMG_EXTENSION = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(7).png";
+        const IMG_FLEXION = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(8).png";
+
+        // --- STATE ---
+        let config = {
+            id: "",
+            hand: "",
+            sessionName: "",
+            mode: "", 
+            totalTrials: 0
+        };
+
+        let trials = []; 
+        let currentTrialIndex = 0;
+        let logs = []; // Ini yang akan disimpan ke JSON
+
+        // --- DOM ELEMENTS ---
+        const screens = {
+            setup: document.getElementById('setup-screen'),
+            experiment: document.getElementById('experiment-screen'),
+            result: document.getElementById('result-screen'),
+            data: document.getElementById('data-screen')
+        };
+        
+        const phases = {
+            fixation: document.getElementById('fixation'),
+            instruction: document.getElementById('instruction'),
+            action: document.getElementById('action-phase'),
+            rest: document.getElementById('rest-phase')
+        };
+
+        const elements = {
+            trialCounter: document.getElementById('trial-counter'),
+            totalTrials: document.getElementById('total-trials'),
+            progressBar: document.getElementById('progress-bar'),
+            instructionImg: document.getElementById('instruction-img'),
+            instructionText: document.getElementById('instruction-text'),
+            actionText: document.getElementById('action-text'),
+            restTimer: document.getElementById('rest-timer'),
+            uploadStatus: document.getElementById('upload-status'),
+            dataTableBody: document.getElementById('data-table-body')
+        };
+
+        // --- HANDLERS ---
+        document.getElementById('config-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const selectEl = document.getElementById('session-type');
+            const selectedOption = selectEl.options[selectEl.selectedIndex];
+
+            config.id = document.getElementById('subject-id').value;
+            config.hand = document.getElementById('hand-selection').value;
+            config.sessionName = selectEl.value;
+            config.totalTrials = parseInt(selectedOption.getAttribute('data-trials'));
+            config.mode = selectedOption.getAttribute('data-mode');
+
+            startSession();
+        });
+
+        // --- LOGIC ---
+        function shuffle(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex != 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        function generateSequence(count) {
+            let seq = [];
+            const half = Math.floor(count / 2);
+            for(let i=0; i<half; i++) seq.push("Extension");
+            for(let i=0; i<half; i++) seq.push("Flexion");
+            if(count % 2 !== 0) seq.push(Math.random() > 0.5 ? "Extension" : "Flexion");
+            return shuffle(seq);
+        }
+
+        function switchScreen(screenName) {
+            Object.values(screens).forEach(s => s.classList.add('hidden'));
+            if(screens[screenName]) screens[screenName].classList.remove('hidden');
+        }
+
+        function showPhaseElement(phaseName) {
+            Object.values(phases).forEach(p => p.classList.add('hidden'));
+            if(phaseName && phases[phaseName]) phases[phaseName].classList.remove('hidden');
+        }
+
+        function startSession() {
+            trials = generateSequence(config.totalTrials);
+            currentTrialIndex = 0;
+            logs = [];
+
+            new Image().src = IMG_EXTENSION;
+            new Image().src = IMG_FLEXION;
+
+            elements.totalTrials.innerText = config.totalTrials;
+            switchScreen('experiment');
+            setTimeout(runTrial, 1000);
+        }
+
+        function runTrial() {
+            if (currentTrialIndex >= config.totalTrials) {
+                finishSession();
+                return;
+            }
+
+            const currentType = trials[currentTrialIndex];
+            elements.trialCounter.innerText = currentTrialIndex + 1;
+            elements.progressBar.style.width = `${((currentTrialIndex) / config.totalTrials) * 100}%`;
+            
+            const trialStartTime = new Date().toISOString();
+
+            // Sequence
+            showPhaseElement('fixation');
+            setTimeout(() => {
+                elements.instructionImg.src = currentType === 'Extension' ? IMG_EXTENSION : IMG_FLEXION;
+                elements.instructionText.innerText = currentType === 'Extension' ? "WRIST EXTENSION" : "WRIST FLEXION";
+                showPhaseElement('instruction');
+
+                setTimeout(() => {
+                    elements.actionText.innerText = config.mode === 'ME' ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN";
+                    showPhaseElement('action');
+
+                    setTimeout(() => {
+                        // Simpan log ke Memory (belum ke DB)
+                        logs.push({
+                            trial: currentTrialIndex + 1,
+                            instruction: currentType,
+                            start_time: trialStartTime
+                        });
+
+                        startRestPhase();
+                    }, 4000);
+                }, 2000);
+            }, 2000);
+        }
+
+        function startRestPhase() {
+            showPhaseElement('rest');
+            let timeLeft = 5;
+            elements.restTimer.innerText = timeLeft;
+            const countdown = setInterval(() => {
+                timeLeft--;
+                elements.restTimer.innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(countdown);
+                    currentTrialIndex++;
+                    runTrial(); 
+                }
+            }, 1000);
+        }
+
+        function finishSession() {
+            elements.progressBar.style.width = `100%`;
+            switchScreen('result');
+            saveDataToSupabase(); 
+        }
+
+        // --- SAVE TO DB (PERUBAHAN UTAMA) ---
+        async function saveDataToSupabase() {
+            elements.uploadStatus.innerText = "Menyimpan data sesi ke Cloud...";
+            elements.uploadStatus.className = "mb-6 p-3 bg-blue-900 rounded text-sm text-blue-200 animate-pulse";
+
+            try {
+                // KITA KIRIM 1 OBJEK YANG BERISI DATA LENGKAP DI DALAM 'trials_data'
+                const sessionPayload = {
+                    subject_id: config.id,
+                    hand: config.hand,
+                    session_type: config.sessionName,
+                    mode: config.mode,
+                    trials_data: logs // Array logs masuk ke satu kolom JSONB
+                };
+
+                const { data, error } = await supabaseClient
+                    .from('experiment_sessions') // Nama tabel baru
+                    .insert(sessionPayload);
+
+                if (error) throw error;
+
+                elements.uploadStatus.innerText = "✅ Sesi berhasil disimpan!";
+                elements.uploadStatus.className = "mb-6 p-3 bg-green-900 rounded text-sm text-green-200";
+            } catch (err) {
+                console.error("Supabase Error:", err);
+                elements.uploadStatus.innerText = "❌ Gagal menyimpan. Pastikan tabel 'experiment_sessions' sudah dibuat.";
+                elements.uploadStatus.className = "mb-6 p-3 bg-red-900 rounded text-sm text-red-200";
+            }
+        }
+
+        // --- FETCH HISTORY (TAMPILAN BARU) ---
+        async function fetchDataHistory() {
+            switchScreen('data');
+            elements.dataTableBody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-500 animate-pulse">Mengambil data sesi...</td></tr>`;
+
+            const { data, error } = await supabaseClient
+                .from('experiment_sessions') // Ambil dari tabel baru
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (error) {
+                elements.dataTableBody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-400">Error: ${error.message}</td></tr>`;
+                return;
+            }
+            if (!data || data.length === 0) {
+                elements.dataTableBody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-500">Belum ada sesi terekam.</td></tr>`;
+                return;
+            }
+
+            elements.dataTableBody.innerHTML = '';
+            data.forEach(row => {
+                const date = new Date(row.created_at).toLocaleString('id-ID', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                });
+                
+                // Hitung jumlah trial dari data JSON
+                const trialCount = row.trials_data ? row.trials_data.length : 0;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-750 transition-colors border-b border-gray-700";
+                tr.innerHTML = `
+                    <td class="p-4 text-gray-400 whitespace-nowrap">${date}</td>
+                    <td class="p-4 font-medium text-white">${row.subject_id}</td>
+                    <td class="p-4">${row.session_type}</td>
+                    <td class="p-4">
+                        <span class="px-2 py-1 rounded text-xs font-bold ${row.mode === 'ME' ? 'bg-blue-900 text-blue-200' : 'bg-purple-900 text-purple-200'}">
+                            ${row.mode}
+                        </span>
+                    </td>
+                    <td class="p-4">${row.hand}</td>
+                    <td class="p-4 text-center">
+                        <span class="bg-gray-700 px-2 py-1 rounded">${trialCount}</span>
+                    </td>
+                    <td class="p-4 text-right">
+                        <button onclick='downloadJsonCSV(${JSON.stringify(row)})' class="text-green-400 hover:text-green-300 text-xs underline">
+                            Download CSV
+                        </button>
+                    </td>
+                `;
+                elements.dataTableBody.appendChild(tr);
+            });
+        }
+
+        // Fungsi download CSV dari tombol "Riwayat"
+        function downloadJsonCSV(row) {
+            const trials = row.trials_data;
+            if(!trials) return alert("Data kosong");
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "SubjectID,Hand,SessionType,Mode,TrialNumber,Instruction,Timestamp\n";
+            
+            trials.forEach(t => {
+                csvContent += `${row.subject_id},${row.hand},${row.session_type},${row.mode},${t.trial},${t.instruction},${t.start_time}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `Backup_${row.subject_id}_${row.session_type}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Fungsi download CSV saat sesi baru selesai (menggunakan memori lokal)
+        function downloadCSV() {
+            if (logs.length === 0) return alert("Tidak ada data.");
+            
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "SubjectID,Hand,SessionType,Mode,TrialNumber,Instruction,Timestamp\n";
+            logs.forEach(l => {
+                csvContent += `${config.id},${config.hand},${config.sessionName},${config.mode},${l.trial},${l.instruction},${l.start_time}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,"-");
+            link.setAttribute("download", `Data_${config.id}_${config.sessionName}_${timestamp}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
