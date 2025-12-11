@@ -53,8 +53,8 @@
             
             <form id="config-form" class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium mb-1">Nama</label>
-                    <input type="text" id="subject-id" required class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none" placeholder="Contoh: S001">
+                    <label class="block text-sm font-medium mb-1">Nama / ID Peserta</label>
+                    <input type="text" id="subject-id" required class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none" placeholder="Contoh: Peserta 01">
                 </div>
 
                 <div>
@@ -77,15 +77,18 @@
                 </div>
 
                 <div class="pt-4 space-y-3">
-                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
+                    <button type="submit" id="btn-start" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
                         Mulai Sesi
                     </button>
                     <button type="button" onclick="openDataScreen()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold py-2 px-4 rounded transition duration-200 border border-gray-600">
-                        📂 Lihat Riwayat Sesi
+                        📂 Lihat & Kelola Data
                     </button>
                 </div>
             </form>
             
+            <div id="loading-msg" class="hidden mt-4 text-xs text-yellow-400 text-center animate-pulse">
+                Mengecek riwayat sesi sebelumnya untuk sinkronisasi...
+            </div>
             <div class="mt-4 text-xs text-gray-500 text-center">
                 Data disimpan per sesi (Ringkas).
             </div>
@@ -97,21 +100,30 @@
         <div class="max-w-6xl mx-auto">
             <div class="flex justify-between items-center mb-6">
                 <div>
-                    <h2 class="text-2xl font-bold text-blue-400">Riwayat Sesi Eksperimen</h2>
-                    <p class="text-gray-400 text-sm">Satu baris mewakili satu sesi penuh.</p>
+                    <h2 class="text-2xl font-bold text-blue-400">Manajemen Data Eksperimen</h2>
+                    <p class="text-gray-400 text-sm">Hapus data dengan hati-hati. Data yang dihapus tidak dapat dikembalikan.</p>
                 </div>
-                <button onclick="switchScreen('setup')" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded flex items-center gap-2">
-                    <span>← Kembali</span>
-                </button>
+                <div class="flex gap-3">
+                    <!-- Tombol Download All -->
+                    <button onclick="downloadAllHistoryCSV()" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 border border-green-600 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                        <span>Unduh Semua (.csv)</span>
+                    </button>
+                    
+                    <button onclick="switchScreen('setup')" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded flex items-center gap-2 border border-gray-600">
+                        <span>← Kembali</span>
+                    </button>
+                </div>
             </div>
 
             <div class="bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden">
                 <div class="overflow-x-auto max-h-[80vh]">
                     <table class="w-full text-left text-sm text-gray-300">
-                        <thead class="bg-gray-700 text-gray-100 uppercase sticky top-0">
+                        <thead class="bg-gray-700 text-gray-100 uppercase sticky top-0 z-10">
                             <tr>
-                                <th class="p-4 w-32">Waktu Selesai</th>
-                                <th class="p-4">Nama</th>
+                                <th class="p-4">Waktu</th>
                                 <th class="p-4">Jenis Sesi</th>
                                 <th class="p-4">Mode</th>
                                 <th class="p-4">Tangan</th>
@@ -121,13 +133,53 @@
                         </thead>
                         <tbody id="data-table-body" class="divide-y divide-gray-700">
                             <tr>
-                                <td colspan="7" class="p-8 text-center text-gray-500">Memuat data...</td>
+                                <td colspan="6" class="p-8 text-center text-gray-500">Memuat data...</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
-            <p class="mt-2 text-xs text-gray-500 text-right">* Menampilkan 50 sesi terakhir.</p>
+            <p class="mt-2 text-xs text-gray-500 text-right">* Menampilkan riwayat sesi.</p>
+        </div>
+    </div>
+
+    <!-- MODAL DETAIL (Hidden by default) -->
+    <div id="detail-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-gray-600">
+            <!-- Modal Header -->
+            <div class="p-5 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-lg">
+                <h3 class="text-xl font-bold text-blue-400">Rincian Trial Sesi</h3>
+                <button onclick="closeDetailModal()" class="text-gray-400 hover:text-white text-3xl font-bold leading-none">&times;</button>
+            </div>
+            
+            <!-- Modal Body (Scrollable) -->
+            <div class="p-6 overflow-y-auto flex-1">
+                <!-- Info Header Sesi -->
+                <div id="modal-session-info" class="mb-6 grid grid-cols-2 gap-4 text-sm bg-gray-700 p-4 rounded border border-gray-600">
+                    <!-- Diisi via JS -->
+                </div>
+
+                <h4 class="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wider">Log Trial</h4>
+                <div class="overflow-hidden rounded border border-gray-700">
+                    <table class="w-full text-left text-sm text-gray-300">
+                        <thead class="bg-gray-900 text-gray-100">
+                            <tr>
+                                <th class="p-3 w-16 text-center">No</th>
+                                <th class="p-3">Instruksi</th>
+                                <th class="p-3 text-right">Waktu Aksi (Main)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modal-trial-list" class="divide-y divide-gray-700 bg-gray-800">
+                            <!-- Diisi via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 border-t border-gray-700 text-right bg-gray-900 rounded-b-lg">
+                <button onclick="closeDetailModal()" class="bg-gray-600 hover:bg-gray-500 text-white px-6 py-2 rounded font-medium transition">Tutup</button>
+            </div>
         </div>
     </div>
 
@@ -207,7 +259,8 @@
 
         let trials = []; 
         let currentTrialIndex = 0;
-        let logs = []; // Ini yang akan disimpan ke JSON
+        let logs = []; 
+        let fetchedSessions = [];
 
         // --- DOM ELEMENTS ---
         const screens = {
@@ -233,7 +286,12 @@
             actionText: document.getElementById('action-text'),
             restTimer: document.getElementById('rest-timer'),
             uploadStatus: document.getElementById('upload-status'),
-            dataTableBody: document.getElementById('data-table-body')
+            dataTableBody: document.getElementById('data-table-body'),
+            modal: document.getElementById('detail-modal'),
+            modalInfo: document.getElementById('modal-session-info'),
+            modalList: document.getElementById('modal-trial-list'),
+            loadingMsg: document.getElementById('loading-msg'),
+            btnStart: document.getElementById('btn-start')
         };
 
         // --- HANDLERS ---
@@ -248,6 +306,7 @@
             config.totalTrials = parseInt(selectedOption.getAttribute('data-trials'));
             config.mode = selectedOption.getAttribute('data-mode');
 
+            // Trigger Async Start Session
             startSession();
         });
 
@@ -281,17 +340,55 @@
             if(phaseName && phases[phaseName]) phases[phaseName].classList.remove('hidden');
         }
 
-        function startSession() {
-            trials = generateSequence(config.totalTrials);
-            currentTrialIndex = 0;
-            logs = [];
+        // --- START SESSION WITH SYNC LOGIC ---
+        async function startSession() {
+            // UI Loading State
+            elements.loadingMsg.classList.remove('hidden');
+            elements.btnStart.disabled = true;
+            elements.btnStart.innerText = "Memuat...";
 
-            new Image().src = IMG_EXTENSION;
-            new Image().src = IMG_FLEXION;
+            try {
+                // 1. Cek apakah user ini sudah pernah melakukan jenis sesi ini sebelumnya (apapun tangannya)
+                const { data: existingSession, error } = await supabaseClient
+                    .from('experiment_sessions')
+                    .select('trials_data')
+                    .eq('subject_id', config.id)
+                    .eq('session_type', config.sessionName)
+                    .limit(1);
 
-            elements.totalTrials.innerText = config.totalTrials;
-            switchScreen('experiment');
-            setTimeout(runTrial, 1000);
+                if (existingSession && existingSession.length > 0) {
+                    console.log("Ditemukan sesi sebelumnya. Menggunakan pola instruksi yang sama.");
+                    const prevTrials = existingSession[0].trials_data;
+                    
+                    if (prevTrials && prevTrials.length >= config.totalTrials) {
+                         trials = prevTrials.slice(0, config.totalTrials).map(t => t.instruction);
+                    } else {
+                        trials = generateSequence(config.totalTrials);
+                    }
+                } else {
+                    console.log("Sesi baru. Membuat pola acak.");
+                    trials = generateSequence(config.totalTrials);
+                }
+
+                currentTrialIndex = 0;
+                logs = [];
+
+                new Image().src = IMG_EXTENSION;
+                new Image().src = IMG_FLEXION;
+
+                elements.totalTrials.innerText = config.totalTrials;
+                switchScreen('experiment');
+                
+                setTimeout(runTrial, 1000);
+
+            } catch (err) {
+                console.error("Error starting session:", err);
+                alert("Gagal memulai sesi. Cek koneksi internet.");
+            } finally {
+                elements.loadingMsg.classList.add('hidden');
+                elements.btnStart.disabled = false;
+                elements.btnStart.innerText = "Mulai Sesi";
+            }
         }
 
         function runTrial() {
@@ -304,9 +401,6 @@
             elements.trialCounter.innerText = currentTrialIndex + 1;
             elements.progressBar.style.width = `${((currentTrialIndex) / config.totalTrials) * 100}%`;
             
-            const trialStartTime = new Date().toISOString();
-
-            // Sequence
             showPhaseElement('fixation');
             setTimeout(() => {
                 elements.instructionImg.src = currentType === 'Extension' ? IMG_EXTENSION : IMG_FLEXION;
@@ -317,12 +411,13 @@
                     elements.actionText.innerText = config.mode === 'ME' ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN";
                     showPhaseElement('action');
 
+                    const actionStartTime = new Date().toISOString();
+
                     setTimeout(() => {
-                        // Simpan log ke Memory (belum ke DB)
                         logs.push({
                             trial: currentTrialIndex + 1,
                             instruction: currentType,
-                            start_time: trialStartTime
+                            start_time: actionStartTime 
                         });
 
                         startRestPhase();
@@ -352,23 +447,22 @@
             saveDataToSupabase(); 
         }
 
-        // --- SAVE TO DB (PERUBAHAN UTAMA) ---
+        // --- SAVE TO DB ---
         async function saveDataToSupabase() {
             elements.uploadStatus.innerText = "Menyimpan data sesi ke Cloud...";
             elements.uploadStatus.className = "mb-6 p-3 bg-blue-900 rounded text-sm text-blue-200 animate-pulse";
 
             try {
-                // KITA KIRIM 1 OBJEK YANG BERISI DATA LENGKAP DI DALAM 'trials_data'
                 const sessionPayload = {
                     subject_id: config.id,
                     hand: config.hand,
                     session_type: config.sessionName,
                     mode: config.mode,
-                    trials_data: logs // Array logs masuk ke satu kolom JSONB
+                    trials_data: logs 
                 };
 
                 const { data, error } = await supabaseClient
-                    .from('experiment_sessions') // Nama tabel baru
+                    .from('experiment_sessions') 
                     .insert(sessionPayload);
 
                 if (error) throw error;
@@ -382,16 +476,20 @@
             }
         }
 
-        // --- FETCH HISTORY (TAMPILAN BARU) ---
-        async function fetchDataHistory() {
+        // --- HISTORY LOGIC ---
+        function openDataScreen() {
             switchScreen('data');
+            fetchDataHistory();
+        }
+
+        async function fetchDataHistory() {
             elements.dataTableBody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-500 animate-pulse">Mengambil data sesi...</td></tr>`;
 
             const { data, error } = await supabaseClient
-                .from('experiment_sessions') // Ambil dari tabel baru
+                .from('experiment_sessions') 
                 .select('*')
                 .order('created_at', { ascending: false })
-                .limit(50);
+                .limit(200);
 
             if (error) {
                 elements.dataTableBody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-400">Error: ${error.message}</td></tr>`;
@@ -402,79 +500,292 @@
                 return;
             }
 
-            elements.dataTableBody.innerHTML = '';
-            data.forEach(row => {
-                const date = new Date(row.created_at).toLocaleString('id-ID', {
-                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                });
-                
-                // Hitung jumlah trial dari data JSON
-                const trialCount = row.trials_data ? row.trials_data.length : 0;
+            fetchedSessions = data;
 
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-gray-750 transition-colors border-b border-gray-700";
-                tr.innerHTML = `
-                    <td class="p-4 text-gray-400 whitespace-nowrap">${date}</td>
-                    <td class="p-4 font-medium text-white">${row.subject_id}</td>
-                    <td class="p-4">${row.session_type}</td>
-                    <td class="p-4">
-                        <span class="px-2 py-1 rounded text-xs font-bold ${row.mode === 'ME' ? 'bg-blue-900 text-blue-200' : 'bg-purple-900 text-purple-200'}">
-                            ${row.mode}
-                        </span>
+            // GROUP BY SUBJECT ID
+            const groupedData = {};
+            data.forEach((row, index) => {
+                row.original_index = index; 
+                if (!groupedData[row.subject_id]) groupedData[row.subject_id] = [];
+                groupedData[row.subject_id].push(row);
+            });
+
+            elements.dataTableBody.innerHTML = '';
+            
+            Object.keys(groupedData).sort().forEach(subjectId => {
+                const sessions = groupedData[subjectId];
+
+                // Header Peserta dengan Tombol Hapus Peserta
+                const headerTr = document.createElement('tr');
+                headerTr.className = "bg-gray-700 text-blue-300 font-bold border-t-4 border-gray-900";
+                headerTr.innerHTML = `
+                    <td colspan="5" class="p-3 pl-4">
+                        <span class="text-gray-400 font-normal text-xs uppercase tracking-wide mr-2">Peserta:</span>
+                        ${subjectId}
+                        <span class="ml-2 text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">${sessions.length} Sesi</span>
                     </td>
-                    <td class="p-4">${row.hand}</td>
-                    <td class="p-4 text-center">
-                        <span class="bg-gray-700 px-2 py-1 rounded">${trialCount}</span>
-                    </td>
-                    <td class="p-4 text-right">
-                        <button onclick='downloadJsonCSV(${JSON.stringify(row)})' class="text-green-400 hover:text-green-300 text-xs underline">
-                            Download CSV
+                    <td class="p-3 text-right">
+                        <button onclick="deleteParticipant('${subjectId}')" class="bg-red-900 hover:bg-red-700 text-red-200 text-xs px-3 py-1 rounded border border-red-800 transition">
+                            Hapus Semua
                         </button>
                     </td>
                 `;
-                elements.dataTableBody.appendChild(tr);
+                elements.dataTableBody.appendChild(headerTr);
+
+                // Baris Sesi dengan Tombol Hapus Sesi
+                sessions.forEach(row => {
+                    const date = new Date(row.created_at).toLocaleString('id-ID', {
+                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                    });
+                    const trialCount = row.trials_data ? row.trials_data.length : 0;
+                    
+                    const isPractice = row.session_type.includes('Latihan');
+                    const opacityClass = isPractice ? "opacity-50" : "";
+
+                    const tr = document.createElement('tr');
+                    tr.className = `hover:bg-gray-750 transition-colors border-b border-gray-700 bg-gray-800 bg-opacity-40 ${opacityClass}`;
+                    tr.innerHTML = `
+                        <td class="p-4 pl-8 text-gray-400 whitespace-nowrap text-sm border-l-4 border-transparent hover:border-blue-500">${date}</td>
+                        <td class="p-4 text-sm">${row.session_type}</td>
+                        <td class="p-4">
+                            <span class="px-2 py-1 rounded text-xs font-bold ${row.mode === 'ME' ? 'bg-blue-900 text-blue-200' : 'bg-purple-900 text-purple-200'}">${row.mode}</span>
+                        </td>
+                        <td class="p-4 text-sm font-medium ${row.hand === 'Kanan' ? 'text-green-300' : 'text-yellow-300'}">${row.hand}</td>
+                        <td class="p-4 text-center text-sm"><span class="bg-gray-700 px-2 py-1 rounded">${trialCount}</span></td>
+                        <td class="p-4 text-right">
+                            <div class="flex justify-end gap-2">
+                                <button onclick="viewSessionDetail(${row.original_index})" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-2 py-1 rounded font-bold transition shadow">Lihat</button>
+                                <button onclick="downloadHistoryCSV(${row.original_index})" class="bg-gray-600 hover:bg-gray-500 text-white text-xs px-2 py-1 rounded font-bold transition shadow">CSV</button>
+                                <button onclick="deleteSession(${row.original_index})" class="bg-red-600 hover:bg-red-500 text-white text-xs px-2 py-1 rounded font-bold transition shadow" title="Hapus Sesi Ini">Hapus</button>
+                            </div>
+                        </td>
+                    `;
+                    elements.dataTableBody.appendChild(tr);
+                });
             });
         }
 
-        // Fungsi download CSV dari tombol "Riwayat"
-        function downloadJsonCSV(row) {
-            const trials = row.trials_data;
-            if(!trials) return alert("Data kosong");
+        // --- DELETE FUNCTIONS (NEW) ---
 
-            let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "SubjectID,Hand,SessionType,Mode,TrialNumber,Instruction,Timestamp\n";
-            
+        async function deleteSession(index) {
+            const row = fetchedSessions[index];
+            if (!row) return;
+
+            if (!confirm(`Apakah Anda yakin ingin menghapus sesi "${row.session_type}" pada tanggal ${new Date(row.created_at).toLocaleDateString()}?\nData tidak dapat dikembalikan.`)) {
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from('experiment_sessions')
+                    .delete()
+                    .eq('id', row.id);
+
+                if (error) throw error;
+                alert("Sesi berhasil dihapus.");
+                fetchDataHistory(); // Refresh table
+            } catch (err) {
+                console.error("Error deleting session:", err);
+                alert("Gagal menghapus sesi. Pastikan kebijakan keamanan database mengizinkan delete.");
+            }
+        }
+
+        async function deleteParticipant(subjectId) {
+            if (!confirm(`PERINGATAN: Anda akan menghapus SEMUA data untuk peserta "${subjectId}".\nIni akan menghapus semua sesi (kanan/kiri, latihan/utama) untuk ID ini.\n\nApakah Anda yakin?`)) {
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from('experiment_sessions')
+                    .delete()
+                    .eq('subject_id', subjectId);
+
+                if (error) throw error;
+                alert(`Semua data untuk ${subjectId} berhasil dihapus.`);
+                fetchDataHistory(); // Refresh table
+            } catch (err) {
+                console.error("Error deleting participant:", err);
+                alert("Gagal menghapus data peserta. Pastikan kebijakan keamanan database mengizinkan delete.");
+            }
+        }
+
+        // --- FITUR EXPORT HORIZONTAL (FILTERED & BLOB FIX) ---
+        async function downloadAllHistoryCSV() {
+            const btn = document.querySelector('button[onclick="downloadAllHistoryCSV()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<span>⏳ Memproses...</span>`;
+            btn.disabled = true;
+
+            try {
+                // Fetch data
+                const { data, error } = await supabaseClient
+                    .from('experiment_sessions') 
+                    .select('*')
+                    .order('subject_id', { ascending: true })
+                    .order('created_at', { ascending: true }) 
+                    .limit(1000);
+
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    alert("Database kosong.");
+                    return;
+                }
+
+                // FILTER: HANYA SESI UTAMA
+                const filteredData = data.filter(s => !s.session_type.includes('Latihan'));
+
+                if (filteredData.length === 0) {
+                    alert("Tidak ada data sesi UTAMA. (Hanya ada sesi Latihan).");
+                    return;
+                }
+
+                // Hitung max trials
+                let maxTrials = 0;
+                filteredData.forEach(s => {
+                    if (s.trials_data && s.trials_data.length > maxTrials) {
+                        maxTrials = s.trials_data.length;
+                    }
+                });
+
+                // Buat Header
+                let csvContent = "ParticipantID,Hand,SessionType,Mode,SessionDate,";
+                for (let i = 1; i <= maxTrials; i++) {
+                    csvContent += `Trial_${i}_Instruksi,Trial_${i}_Waktu_Action,`;
+                }
+                csvContent += "\n";
+
+                // Isi Data
+                filteredData.forEach(session => {
+                    const sessionDate = new Date(session.created_at).toISOString();
+                    let rowStr = `${session.subject_id},${session.hand},${session.session_type},${session.mode},${sessionDate},`;
+
+                    const trials = session.trials_data || [];
+                    for (let i = 0; i < maxTrials; i++) {
+                        if (trials[i]) {
+                            rowStr += `${trials[i].instruction},${trials[i].start_time},`;
+                        } else {
+                            rowStr += ",,";
+                        }
+                    }
+                    csvContent += rowStr + "\n";
+                });
+
+                // --- FIX: GUNAKAN BLOB UNTUK DOWNLOAD ---
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement("a");
+                link.href = url;
+                const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,"-");
+                link.setAttribute("download", `REKAP_UTAMA_MOTORIK_${timestamp}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Cleanup URL object
+                setTimeout(() => URL.revokeObjectURL(url), 100);
+
+            } catch (err) {
+                console.error(err);
+                alert("Gagal mengunduh: " + err.message);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // --- MODAL & INDIVIDUAL CSV ---
+        function viewSessionDetail(index) {
+            const row = fetchedSessions[index];
+            if(!row) return;
+
+            const date = new Date(row.created_at).toLocaleString('id-ID', {
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+
+            elements.modalInfo.innerHTML = `
+                <div><p class="text-gray-400 text-xs">Peserta</p><p class="text-white font-bold text-lg">${row.subject_id}</p></div>
+                <div><p class="text-gray-400 text-xs">Waktu</p><p class="text-white font-bold">${date}</p></div>
+                <div><p class="text-gray-400 text-xs">Jenis Sesi</p><p class="text-white font-bold">${row.session_type} (${row.mode})</p></div>
+                <div><p class="text-gray-400 text-xs">Tangan</p><p class="text-white font-bold ${row.hand === 'Kanan' ? 'text-green-400' : 'text-yellow-400'}">${row.hand}</p></div>
+            `;
+
+            elements.modalList.innerHTML = '';
+            const trials = row.trials_data || [];
+
+            if (trials.length === 0) {
+                elements.modalList.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-gray-500">Tidak ada detail trial.</td></tr>`;
+            } else {
+                trials.forEach(t => {
+                    let timeDisplay = t.start_time;
+                    try {
+                        const d = new Date(t.start_time);
+                        timeDisplay = d.toLocaleTimeString('id-ID', { hour12: false }) + `.${d.getMilliseconds()}`;
+                    } catch(e) {}
+                    const colorClass = t.instruction === 'Extension' ? 'text-green-400' : 'text-yellow-400';
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-gray-700 transition-colors";
+                    tr.innerHTML = `
+                        <td class="p-3 text-center border-b border-gray-700 text-gray-400">${t.trial}</td>
+                        <td class="p-3 border-b border-gray-700 font-bold ${colorClass}">${t.instruction}</td>
+                        <td class="p-3 text-right border-b border-gray-700 font-mono text-gray-400 text-xs">${timeDisplay}</td>
+                    `;
+                    elements.modalList.appendChild(tr);
+                });
+            }
+            elements.modal.classList.remove('hidden');
+        }
+
+        function closeDetailModal() {
+            elements.modal.classList.add('hidden');
+        }
+
+        elements.modal.addEventListener('click', function(e) {
+            if (e.target === elements.modal) closeDetailModal();
+        });
+
+        function downloadHistoryCSV(index) {
+            const row = fetchedSessions[index];
+            if (!row) return alert("Data tidak ditemukan.");
+            const trials = row.trials_data;
+            if(!trials || trials.length === 0) return alert("Data kosong.");
+
+            let csvContent = "ParticipantID,Hand,SessionType,Mode,TrialNumber,Instruction,Timestamp_Action\n";
             trials.forEach(t => {
                 csvContent += `${row.subject_id},${row.hand},${row.session_type},${row.mode},${t.trial},${t.instruction},${t.start_time}\n`;
             });
-
-            const encodedUri = encodeURI(csvContent);
+            
+            // FIX BLOB DOWNLOAD
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `Backup_${row.subject_id}_${row.session_type}.csv`);
+            link.href = url;
+            link.setAttribute("download", `Data_${row.subject_id}_${row.session_type}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
         }
 
-        // Fungsi download CSV saat sesi baru selesai (menggunakan memori lokal)
         function downloadCSV() {
             if (logs.length === 0) return alert("Tidak ada data.");
-            
-            let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "SubjectID,Hand,SessionType,Mode,TrialNumber,Instruction,Timestamp\n";
+            let csvContent = "ParticipantID,Hand,SessionType,Mode,TrialNumber,Instruction,Timestamp_Action\n";
             logs.forEach(l => {
                 csvContent += `${config.id},${config.hand},${config.sessionName},${config.mode},${l.trial},${l.instruction},${l.start_time}\n`;
             });
 
-            const encodedUri = encodeURI(csvContent);
+            // FIX BLOB DOWNLOAD
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
+            link.href = url;
             const timestamp = new Date().toISOString().slice(0,19).replace(/:/g,"-");
             link.setAttribute("download", `Data_${config.id}_${config.sessionName}_${timestamp}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
         }
     </script>
 </body>
