@@ -77,8 +77,12 @@
                 </div>
 
                 <div class="pt-4 space-y-3">
-                    <button type="submit" id="btn-start" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
+                    <button type="submit" id="btn-start" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200 shadow">
                         Mulai Sesi
+                    </button>
+                    <!-- TOMBOL DEMO BARU -->
+                    <button type="button" id="btn-demo" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition duration-200 border border-purple-500 shadow-lg flex items-center justify-center gap-2">
+                        🚀 Coba Mode Demo
                     </button>
                     <button type="button" onclick="openDataScreen()" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold py-2 px-4 rounded transition duration-200 border border-gray-600">
                         📂 Lihat & Kelola Data
@@ -87,7 +91,7 @@
             </form>
             
             <div id="loading-msg" class="hidden mt-4 text-xs text-yellow-400 text-center animate-pulse">
-                Mengecek riwayat sesi sebelumnya untuk sinkronisasi...
+                Mempersiapkan sesi eksperimen...
             </div>
             <div class="mt-4 text-xs text-gray-500 text-center">
                 Data disimpan per sesi (Ringkas).
@@ -190,6 +194,7 @@
         </div>
         <div class="absolute top-2 right-4 text-gray-500 text-sm">
             Trial: <span id="trial-counter">0</span>/<span id="total-trials">0</span>
+            <span id="demo-indicator" class="hidden text-purple-400 font-bold ml-2">(DEMO MODE)</span>
         </div>
 
         <div class="center-absolute">
@@ -261,6 +266,7 @@
         let currentTrialIndex = 0;
         let logs = []; 
         let fetchedSessions = [];
+        let isDemo = false; // Flag status mode demo
 
         // --- DOM ELEMENTS ---
         const screens = {
@@ -281,6 +287,7 @@
             trialCounter: document.getElementById('trial-counter'),
             totalTrials: document.getElementById('total-trials'),
             progressBar: document.getElementById('progress-bar'),
+            demoIndicator: document.getElementById('demo-indicator'),
             instructionImg: document.getElementById('instruction-img'),
             instructionText: document.getElementById('instruction-text'),
             actionText: document.getElementById('action-text'),
@@ -291,12 +298,17 @@
             modalInfo: document.getElementById('modal-session-info'),
             modalList: document.getElementById('modal-trial-list'),
             loadingMsg: document.getElementById('loading-msg'),
-            btnStart: document.getElementById('btn-start')
+            btnStart: document.getElementById('btn-start'),
+            btnDemo: document.getElementById('btn-demo')
         };
 
         // --- HANDLERS ---
+        // 1. Submit form eksperimen normal
         document.getElementById('config-form').addEventListener('submit', function(e) {
             e.preventDefault();
+            isDemo = false;
+            elements.demoIndicator.classList.add('hidden');
+
             const selectEl = document.getElementById('session-type');
             const selectedOption = selectEl.options[selectEl.selectedIndex];
 
@@ -306,9 +318,28 @@
             config.totalTrials = parseInt(selectedOption.getAttribute('data-trials'));
             config.mode = selectedOption.getAttribute('data-mode');
 
-            // Trigger Async Start Session
             startSession();
         });
+
+        // 2. Klik tombol Demo (tanpa validasi form ID)
+        elements.btnDemo.addEventListener('click', function() {
+            isDemo = true;
+            elements.demoIndicator.classList.remove('hidden');
+
+            const selectEl = document.getElementById('session-type');
+            const selectedOption = selectEl.options[selectEl.selectedIndex];
+
+            // Generate random ID untuk sesi demo
+            const randomDemoId = Math.floor(Math.random() * 10000);
+            config.id = `DEMO_USER_${randomDemoId}`;
+            config.hand = document.getElementById('hand-selection').value || "Kanan";
+            config.sessionName = selectEl.value;
+            config.totalTrials = parseInt(selectedOption.getAttribute('data-trials'));
+            config.mode = selectedOption.getAttribute('data-mode');
+
+            startSession();
+        });
+
 
         // --- LOGIC ---
         function shuffle(array) {
@@ -344,30 +375,41 @@
         async function startSession() {
             // UI Loading State
             elements.loadingMsg.classList.remove('hidden');
+            if (isDemo) {
+                elements.loadingMsg.innerText = "Mempersiapkan Sesi Demo...";
+            } else {
+                elements.loadingMsg.innerText = "Mengecek riwayat sesi sebelumnya untuk sinkronisasi...";
+            }
             elements.btnStart.disabled = true;
+            elements.btnDemo.disabled = true;
             elements.btnStart.innerText = "Memuat...";
 
             try {
-                // 1. Cek apakah user ini sudah pernah melakukan jenis sesi ini sebelumnya (apapun tangannya)
-                const { data: existingSession, error } = await supabaseClient
-                    .from('experiment_sessions')
-                    .select('trials_data')
-                    .eq('subject_id', config.id)
-                    .eq('session_type', config.sessionName)
-                    .limit(1);
+                if (isDemo) {
+                    console.log("Mode Demo aktif. Menggunakan pola acak baru.");
+                    trials = generateSequence(config.totalTrials);
+                } else {
+                    // 1. Cek apakah user ini sudah pernah melakukan jenis sesi ini sebelumnya (apapun tangannya)
+                    const { data: existingSession, error } = await supabaseClient
+                        .from('experiment_sessions')
+                        .select('trials_data')
+                        .eq('subject_id', config.id)
+                        .eq('session_type', config.sessionName)
+                        .limit(1);
 
-                if (existingSession && existingSession.length > 0) {
-                    console.log("Ditemukan sesi sebelumnya. Menggunakan pola instruksi yang sama.");
-                    const prevTrials = existingSession[0].trials_data;
-                    
-                    if (prevTrials && prevTrials.length >= config.totalTrials) {
-                         trials = prevTrials.slice(0, config.totalTrials).map(t => t.instruction);
+                    if (existingSession && existingSession.length > 0) {
+                        console.log("Ditemukan sesi sebelumnya. Menggunakan pola instruksi yang sama.");
+                        const prevTrials = existingSession[0].trials_data;
+                        
+                        if (prevTrials && prevTrials.length >= config.totalTrials) {
+                             trials = prevTrials.slice(0, config.totalTrials).map(t => t.instruction);
+                        } else {
+                            trials = generateSequence(config.totalTrials);
+                        }
                     } else {
+                        console.log("Sesi baru. Membuat pola acak.");
                         trials = generateSequence(config.totalTrials);
                     }
-                } else {
-                    console.log("Sesi baru. Membuat pola acak.");
-                    trials = generateSequence(config.totalTrials);
                 }
 
                 currentTrialIndex = 0;
@@ -387,6 +429,7 @@
             } finally {
                 elements.loadingMsg.classList.add('hidden');
                 elements.btnStart.disabled = false;
+                elements.btnDemo.disabled = false;
                 elements.btnStart.innerText = "Mulai Sesi";
             }
         }
@@ -444,7 +487,14 @@
         function finishSession() {
             elements.progressBar.style.width = `100%`;
             switchScreen('result');
-            saveDataToSupabase(); 
+            
+            // Jika Mode Demo, tidak perlu di-save ke database
+            if (isDemo) {
+                elements.uploadStatus.innerText = "Sesi Demo Selesai - Data tidak disimpan ke Cloud.";
+                elements.uploadStatus.className = "mb-6 p-3 bg-purple-900 rounded text-sm text-purple-200";
+            } else {
+                saveDataToSupabase(); 
+            }
         }
 
         // --- SAVE TO DB ---
