@@ -96,9 +96,9 @@
                 </div>
 
                 <div class="bg-gray-700/50 p-3 rounded border border-gray-600">
-                    <p class="text-sm font-semibold text-yellow-300 mb-2">🎯 Mode Sesi Berurutan:</p>
-                    <p class="text-xs text-gray-300">ME Latihan (5) → ME Utama (15) → MI Latihan (5) → MI Utama (15)</p>
-                    <p class="text-xs text-gray-400 mt-2">⏱️ Timeline presisi & gambar sudah dioptimasi.</p>
+                    <p class="text-sm font-semibold text-yellow-300 mb-2">🎯 Mode Sesi Berurutan (UPDATED):</p>
+                    <p class="text-xs text-gray-300">ME Latihan (5) → ME Utama (20) → MI Latihan (5) → MI Utama (40)</p>
+                    <p class="text-xs text-gray-400 mt-2">⏱️ Total trials: 70 | Timeline presisi & gambar sudah dioptimasi.</p>
                 </div>
 
                 <div class="pt-4 space-y-3">
@@ -263,12 +263,13 @@
             console.log("Preload gambar selesai diinisiasi");
         })();
 
-        // Urutan sesi
+        // ========== UPDATE SESI DENGAN JUMLAH TRIAL BARU ==========
+        // ME Latihan (5) → ME Utama (20) → MI Latihan (5) → MI Utama (40)
         const SESSION_QUEUE = [
-            { name: "ME_Latihan", mode: "ME", trialsCount: 5, label: "Motor Execution - Latihan" },
-            { name: "ME_Utama", mode: "ME", trialsCount: 15, label: "Motor Execution - Utama" },
-            { name: "MI_Latihan", mode: "MI", trialsCount: 5, label: "Motor Imagery - Latihan" },
-            { name: "MI_Utama", mode: "MI", trialsCount: 15, label: "Motor Imagery - Utama" }
+            { name: "ME_Latihan", mode: "ME", trialsCount: 5, label: "Motor Execution - Latihan (5x)" },
+            { name: "ME_Utama", mode: "ME", trialsCount: 20, label: "Motor Execution - Utama (20x)" },
+            { name: "MI_Latihan", mode: "MI", trialsCount: 5, label: "Motor Imagery - Latihan (5x)" },
+            { name: "MI_Utama", mode: "MI", trialsCount: 40, label: "Motor Imagery - Utama (40x)" }
         ];
 
         // State global
@@ -365,7 +366,7 @@
                 };
                 const { error } = await _supabase.from('experiment_sessions').insert(payload);
                 if (error) throw error;
-                console.log(`✅ Session ${sessionDef.name} saved`);
+                console.log(`✅ Session ${sessionDef.name} (${logsData.length} trials) saved`);
                 return { success: true };
             } catch (e) {
                 console.error("Save error:", e);
@@ -393,14 +394,12 @@
                     : "ml-2 px-2 py-0.5 rounded text-xs font-bold bg-purple-800 text-purple-200";
                 progressBar.style.width = "0%";
                 
-                // Fungsi untuk update gambar dengan immediate (tanpa delay karena sudah preload)
                 function updateInstructionImage(type) {
                     if (type === 'Extension') {
                         instructionImg.src = IMG_EXTENSION;
                     } else {
                         instructionImg.src = IMG_FLEXION;
                     }
-                    // Memastikan gambar terlihat; jika masih loading, tetap cepat karena cache
                     instructionImg.style.opacity = "1";
                 }
                 
@@ -429,12 +428,13 @@
                     
                     const instructionType = trialsArray[trialIndex];
                     trialCounter.innerText = trialIndex + 1;
-                    progressBar.style.width = `${((trialIndex) / totalTrials) * 100}%`;
+                    const currentProgress = ((trialIndex) / totalTrials) * 100;
+                    progressBar.style.width = `${currentProgress}%`;
                     
                     // FIXATION (2 detik)
                     showPhase('fixation');
                     const t1 = setTimeout(() => {
-                        // INSTRUCTION (2 detik) - update gambar secara instan (cache)
+                        // INSTRUCTION (2 detik)
                         const instructionText = document.getElementById('instruction-text');
                         updateInstructionImage(instructionType);
                         instructionText.innerText = instructionType === 'Extension' ? "WRIST EXTENSION" : "WRIST FLEXION";
@@ -471,7 +471,7 @@
                                     }
                                 }, 1000);
                                 currentTimeouts.push(currentRestInterval);
-                            }, 4000); // waktu aksi 4 detik
+                            }, 4000);
                             currentTimeouts.push(t3);
                         }, 2000);
                         currentTimeouts.push(t2);
@@ -535,7 +535,7 @@
             // Selesai semua
             switchScreen('result');
             const finalMsg = document.getElementById('final-upload-status');
-            finalMsg.innerText = `✅ Semua data tersimpan. Total durasi: ${getRelativeTime()}`;
+            finalMsg.innerText = `✅ Semua data tersimpan. Total trials: 70 | Durasi: ${getRelativeTime()}`;
             finalMsg.className = "mb-6 p-3 bg-green-900 rounded text-sm text-green-200";
         }
         
@@ -752,7 +752,7 @@
             }
         });
         
-        console.log("🚀 Eksperimen siap - Gambar sudah di-preload, tanpa delay.");
+        console.log("🚀 Eksperimen siap - Updated trial counts: ME_Latihan(5), ME_Utama(20), MI_Latihan(5), MI_Utama(40)");
     </script>
 </body>
 </html>
