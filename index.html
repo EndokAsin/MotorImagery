@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eksperimen Motor Imagery & Execution</title>
+    <title>Eksperimen Motor Imagery & Execution | NeuroLab</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -26,6 +26,11 @@
             font-weight: bold;
             color: white;
             text-shadow: 0 0 20px rgba(59,130,246,0.5);
+            animation: subtlePulse 1s ease-in-out infinite;
+        }
+        @keyframes subtlePulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.02); }
         }
         .countdown-number {
             font-size: 6rem;
@@ -37,9 +42,39 @@
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.7; transform: scale(1.05); }
         }
+        .img-preload {
+            position: absolute;
+            width: 0;
+            height: 0;
+            opacity: 0;
+            pointer-events: none;
+            z-index: -999;
+        }
+        .instruction-img {
+            transition: opacity 0.15s ease-in-out;
+            background-color: #1f2937;
+            border-radius: 1rem;
+        }
+        .phase-transition {
+            transition: opacity 0.2s ease;
+        }
+        .go-pulse {
+            animation: goPulse 0.8s ease-in-out infinite;
+        }
+        @keyframes goPulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(74, 222, 128, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
     </style>
 </head>
 <body>
+
+    <!-- PRELOAD GAMBAR TERSEMBUNYI UNTUK MENGHILANGKAN DELAY -->
+    <div style="display: none;">
+        <img id="preload-ext" src="https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(7).png" alt="preload">
+        <img id="preload-flex" src="https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(8).png" alt="preload">
+    </div>
 
     <!-- HALAMAN SETUP -->
     <div id="setup-screen" class="min-h-screen flex items-center justify-center p-4">
@@ -63,7 +98,7 @@
                 <div class="bg-gray-700/50 p-3 rounded border border-gray-600">
                     <p class="text-sm font-semibold text-yellow-300 mb-2">🎯 Mode Sesi Berurutan:</p>
                     <p class="text-xs text-gray-300">ME Latihan (5) → ME Utama (15) → MI Latihan (5) → MI Utama (15)</p>
-                    <p class="text-xs text-gray-400 mt-2">⏱️ Timeline sesi tersimpan di database.</p>
+                    <p class="text-xs text-gray-400 mt-2">⏱️ Timeline presisi & gambar sudah dioptimasi.</p>
                 </div>
 
                 <div class="pt-4 space-y-3">
@@ -77,7 +112,7 @@
             </div>
             
             <div id="loading-msg" class="hidden mt-4 text-xs text-yellow-400 text-center animate-pulse">
-                Mempersiapkan sesi eksperimen...
+                Mempersiapkan sesi eksperimen & preload gambar...
             </div>
             <div class="mt-4 text-xs text-gray-500 text-center">
                 Data disimpan per sesi dengan timeline presisi.
@@ -168,11 +203,11 @@
         <div class="center-absolute">
             <div id="fixation" class="hidden"><div class="fixation-cross">+</div></div>
             <div id="instruction" class="hidden">
-                <img id="instruction-img" src="" alt="Instruksi" class="mx-auto h-56 object-contain mb-4 rounded-lg border-2 border-gray-600">
+                <img id="instruction-img" class="instruction-img mx-auto h-56 object-contain mb-4 rounded-lg border-2 border-gray-600 shadow-2xl" style="background: #111827;" alt="Instruksi Gerakan">
                 <h2 id="instruction-text" class="text-3xl font-bold text-yellow-400 uppercase"></h2>
             </div>
             <div id="action-phase" class="hidden">
-                <div class="w-32 h-32 rounded-full border-4 border-green-500 flex items-center justify-center mx-auto mb-6 bg-green-900 bg-opacity-20 animate-pulse">
+                <div class="w-32 h-32 rounded-full border-4 border-green-500 flex items-center justify-center mx-auto mb-6 bg-green-900 bg-opacity-20 go-pulse">
                     <span class="text-4xl font-bold text-green-400">GO</span>
                 </div>
                 <h2 id="action-text" class="text-4xl font-bold text-white uppercase"></h2>
@@ -210,13 +245,23 @@
     </div>
 
     <script>
-        // Inisialisasi Supabase
+        // ==================== KONFIGURASI SUPABASE ====================
         const SUPABASE_URL = 'https://rkekwnmwuybxzmbptcwh.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_5p4UmkOLs41OWf97B-He4g_A2MRqC7T';
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+        // URL Gambar (disimpan variabel agar mudah)
         const IMG_EXTENSION = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(7).png";
         const IMG_FLEXION = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(8).png";
+        
+        // PRELOAD GAMBAR SECARA EKSPLISIT (memastikan cache penuh)
+        (function preloadImages() {
+            const img1 = new Image();
+            img1.src = IMG_EXTENSION;
+            const img2 = new Image();
+            img2.src = IMG_FLEXION;
+            console.log("Preload gambar selesai diinisiasi");
+        })();
 
         // Urutan sesi
         const SESSION_QUEUE = [
@@ -320,7 +365,7 @@
                 };
                 const { error } = await _supabase.from('experiment_sessions').insert(payload);
                 if (error) throw error;
-                console.log(`Session ${sessionDef.name} saved successfully`);
+                console.log(`✅ Session ${sessionDef.name} saved`);
                 return { success: true };
             } catch (e) {
                 console.error("Save error:", e);
@@ -328,7 +373,7 @@
             }
         }
         
-        // ==================== MENJALANKAN SATU SESI ====================
+        // ==================== MENJALANKAN SATU SESI (OPTIMASI GAMBAR) ====================
         async function runSingleSession(sessionDef, trialsArray, startRelative) {
             return new Promise((resolve) => {
                 let trialIndex = 0;
@@ -339,6 +384,7 @@
                 const totalTrialsSpan = document.getElementById('total-trials');
                 const progressBar = document.getElementById('progress-bar');
                 const sessionModeBadge = document.getElementById('session-mode-badge');
+                const instructionImg = document.getElementById('instruction-img');
                 
                 totalTrialsSpan.innerText = totalTrials;
                 sessionModeBadge.innerText = sessionDef.mode;
@@ -346,6 +392,17 @@
                     ? "ml-2 px-2 py-0.5 rounded text-xs font-bold bg-blue-800 text-blue-200" 
                     : "ml-2 px-2 py-0.5 rounded text-xs font-bold bg-purple-800 text-purple-200";
                 progressBar.style.width = "0%";
+                
+                // Fungsi untuk update gambar dengan immediate (tanpa delay karena sudah preload)
+                function updateInstructionImage(type) {
+                    if (type === 'Extension') {
+                        instructionImg.src = IMG_EXTENSION;
+                    } else {
+                        instructionImg.src = IMG_FLEXION;
+                    }
+                    // Memastikan gambar terlihat; jika masih loading, tetap cepat karena cache
+                    instructionImg.style.opacity = "1";
+                }
                 
                 function finishSession() {
                     clearAllTimeouts();
@@ -361,7 +418,7 @@
                             sessionEndRelative: endRelative
                         });
                         resolve();
-                    });
+                    }).catch(() => resolve());
                 }
                 
                 function runTrial() {
@@ -374,13 +431,12 @@
                     trialCounter.innerText = trialIndex + 1;
                     progressBar.style.width = `${((trialIndex) / totalTrials) * 100}%`;
                     
-                    // Fixation 2 detik
+                    // FIXATION (2 detik)
                     showPhase('fixation');
                     const t1 = setTimeout(() => {
-                        // Instruction 2 detik
-                        const instructionImg = document.getElementById('instruction-img');
+                        // INSTRUCTION (2 detik) - update gambar secara instan (cache)
                         const instructionText = document.getElementById('instruction-text');
-                        instructionImg.src = instructionType === 'Extension' ? IMG_EXTENSION : IMG_FLEXION;
+                        updateInstructionImage(instructionType);
                         instructionText.innerText = instructionType === 'Extension' ? "WRIST EXTENSION" : "WRIST FLEXION";
                         showPhase('instruction');
                         
@@ -398,7 +454,7 @@
                                     relative_time: getRelativeTime()
                                 });
                                 
-                                // Rest 5 detik
+                                // REST 5 detik
                                 showPhase('rest');
                                 let restSec = 5;
                                 const restTimer = document.getElementById('rest-timer');
@@ -415,7 +471,7 @@
                                     }
                                 }, 1000);
                                 currentTimeouts.push(currentRestInterval);
-                            }, 4000);
+                            }, 4000); // waktu aksi 4 detik
                             currentTimeouts.push(t3);
                         }, 2000);
                         currentTimeouts.push(t2);
@@ -437,7 +493,7 @@
                 : "text-xl font-bold text-yellow-400";
             
             switchScreen('experiment');
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 300));
             
             for (let idx = 0; idx < SESSION_QUEUE.length; idx++) {
                 const sessionDef = SESSION_QUEUE[idx];
@@ -472,7 +528,7 @@
                         return;
                     }
                     switchScreen('experiment');
-                    await new Promise(r => setTimeout(r, 300));
+                    await new Promise(r => setTimeout(r, 200));
                 }
             }
             
@@ -690,14 +746,13 @@
         document.getElementById('close-modal-btn').addEventListener('click', closeDetailModal);
         document.getElementById('close-modal-footer-btn').addEventListener('click', closeDetailModal);
         
-        // Tutup modal jika klik di luar
         document.getElementById('detail-modal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('detail-modal')) {
                 closeDetailModal();
             }
         });
         
-        console.log("Sistem siap - timeline tersimpan di database");
+        console.log("🚀 Eksperimen siap - Gambar sudah di-preload, tanpa delay.");
     </script>
 </body>
 </html>
