@@ -435,49 +435,62 @@
 
             if(!faceId) { alert("Pilih Kamera Wajah minimal untuk merekam!"); return; }
 
+            // Solusi: Gunakan Fallback. Jika kamera kaku dan menolak kompresi, biarkan pakai resolusi bawaannya.
+            const tryGetStream = async (deviceId, camName) => {
+                try {
+                    // Percobaan 1: Coba dengan resolusi ideal (ukuran kecil)
+                    return await navigator.mediaDevices.getUserMedia({ 
+                        video: { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } }, 
+                        audio: false 
+                    });
+                } catch (e) {
+                    addLog(`⚠️ ${camName} menolak kompresi resolusi. Memuat setelan bawaan...`, 'warning');
+                    // Percobaan 2: Jika "tidak bisa dipaksa" (Overconstrained), panggil kamera tanpa batasan resolusi
+                    return await navigator.mediaDevices.getUserMedia({ 
+                        video: { deviceId: { exact: deviceId } }, 
+                        audio: false 
+                    });
+                }
+            };
+            
+            // Connect Face Cam
             try {
-                // Connect Face Cam
-                streams.face = await navigator.mediaDevices.getUserMedia({ 
-                    video: { deviceId: { exact: faceId }, width: 1280, height: 720 } 
-                });
+                streams.face = await tryGetStream(faceId, "Kamera Wajah");
                 document.getElementById('vid-face').srcObject = streams.face;
                 addLog('✅ Kamera Wajah terhubung');
+            } catch (err) {
+                addLog(`❌ Error Kamera Wajah: ${err.message}`, 'error');
+            }
 
-                // Connect Body Cam
-                if(bodyId) {
-                    if(bodyId === faceId || bodyId === eegId) {
-                        addLog('⚠️ Peringatan: Kamera Badan menggunakan device yang sama dengan kamera lain.', 'warning');
-                    }
-                    streams.body = await navigator.mediaDevices.getUserMedia({ 
-                        video: { deviceId: { exact: bodyId }, width: 1280, height: 720 } 
-                    });
+            // Connect Body Cam
+            if(bodyId) {
+                try {
+                    streams.body = await tryGetStream(bodyId, "Kamera Badan");
                     document.getElementById('vid-body').srcObject = streams.body;
                     addLog('✅ Kamera Badan terhubung');
-                } else {
-                    addLog('⚠️ Kamera Badan tidak dipilih.', 'warning');
+                } catch (err) {
+                    addLog(`❌ Error Kamera Badan: ${err.message}`, 'error');
                 }
+            } else {
+                addLog('⚠️ Kamera Badan tidak dipilih.', 'warning');
+            }
 
-                // Connect EEG / Screen Monitor Cam
-                if(eegId) {
-                    if(eegId === faceId) {
-                        addLog('⚠️ Peringatan: Kamera ke-3 menggunakan device yang sama dengan wajah.', 'warning');
-                    }
-                    streams.screen = await navigator.mediaDevices.getUserMedia({ 
-                        video: { deviceId: { exact: eegId }, width: 1280, height: 720 } 
-                    });
+            // Connect EEG / Screen Monitor Cam
+            if(eegId) {
+                try {
+                    streams.screen = await tryGetStream(eegId, "Kamera ke-3");
                     document.getElementById('vid-screen').srcObject = streams.screen;
                     addLog('✅ Kamera ke-3 (Alat/Layar) terhubung');
-                } else {
-                    addLog('⚠️ Kamera ke-3 (Alat/Layar) tidak dipilih.', 'warning');
+                } catch (err) {
+                    addLog(`❌ Error Kamera ke-3: ${err.message}`, 'error');
                 }
-
-                document.getElementById('badge-cam').className = "px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-bold border border-green-800";
-                document.getElementById('badge-cam').innerText = "Cams Ready";
-                checkReadyToStart();
-
-            } catch (err) {
-                addLog(`❌ Error akses kamera: ${err.message}`, 'error');
+            } else {
+                addLog('⚠️ Kamera ke-3 (Alat/Layar) tidak dipilih.', 'warning');
             }
+
+            document.getElementById('badge-cam').className = "px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-bold border border-green-800";
+            document.getElementById('badge-cam').innerText = "Cams Ready";
+            checkReadyToStart();
         });
 
         // ==================== BUKA LAYAR EKSPERIMEN (POPUP) ====================
@@ -578,7 +591,11 @@
         function startRecordingStreams() {
             recordedChunks = { face: [], body: [], screen: [] };
             
-            const options = { mimeType: 'video/webm; codecs=vp9' }; // Optimal untuk web
+            const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp8') ? 'video/webm; codecs=vp8' : 'video/webm';
+            const options = { 
+                mimeType: mimeType,
+                videoBitsPerSecond: 250000 // 250 kbps (membuat file sangat kecil, ~112MB per jam per kamera)
+            };
 
             ['face', 'body', 'screen'].forEach(type => {
                 if (streams[type]) {
@@ -869,22 +886,30 @@
         async function saveAllDataToDB(subjectId, hand) {
             addLog("⏳ Menyimpan log timeline ke Database...", "warning");
             try {
-                const insertPromises = experimentData.map(data => {
-                    return _supabase.from('experiment_sessions').insert({
+                for (const data of experimentData) {
+                    const payload = {
                         subject_id: subjectId,
                         hand: hand,
                         session_type: data.sessionDef.label,
                         mode: data.sessionDef.mode,
                         session_start_relative: data.startTime,
                         session_end_relative: data.endTime,
-                        trials_data: data.logs
-                    });
-                });
+                        session_start_timestamp: new Date().toISOString(),
+                        trials_data: data.logs // Array JSON ini otomatis masuk ke kolom tipe JSONB
+                    };
+
+                    const { error } = await _supabase.from('experiment_sessions').insert(payload);
+                    
+                    if (error) {
+                        console.error("Supabase Error Detail:", error);
+                        throw new Error(error.message || "Gagal insert ke tabel experiment_sessions");
+                    }
+                }
                 
-                await Promise.all(insertPromises);
                 addLog("✅ Log timeline berhasil diamankan di Database.", "success");
             } catch (err) {
                 addLog("❌ Gagal menyimpan log ke Database: " + err.message, "error");
+                console.error("Log gagal:", err);
             }
         }
 
