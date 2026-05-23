@@ -3,546 +3,909 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eksperimen Motor Imagery & Execution | NeuroLab</title>
+    <title>NeuroLab Controller | Dual Monitor & Recording</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #1a202c;
+            background-color: #0f172a;
             color: #e2e8f0;
             overflow-x: hidden;
         }
-        .center-absolute {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            border: 1px solid #334155;
+            aspect-ratio: 16/9;
+        }
+        video {
             width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
-        .fixation-cross {
-            font-size: 5rem;
-            font-weight: bold;
-            color: white;
-            text-shadow: 0 0 20px rgba(59,130,246,0.5);
-            animation: subtlePulse 1s ease-in-out infinite;
-        }
-        @keyframes subtlePulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.8; transform: scale(1.02); }
-        }
-        .countdown-number {
-            font-size: 6rem;
-            font-weight: bold;
-            font-family: monospace;
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.7; transform: scale(1.05); }
-        }
-        .img-preload {
+        .cam-label {
             position: absolute;
-            width: 0;
-            height: 0;
-            opacity: 0;
-            pointer-events: none;
-            z-index: -999;
+            top: 0.5rem;
+            left: 0.5rem;
+            background: rgba(0,0,0,0.8);
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: bold;
+            z-index: 10;
         }
-        .instruction-img {
-            transition: opacity 0.15s ease-in-out;
-            background-color: #1f2937;
-            border-radius: 1rem;
+        .rec-indicator {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: rgba(220, 38, 38, 0.9);
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: bold;
+            z-index: 10;
+            display: none;
+            animation: pulse-rec 1.5s infinite;
         }
-        .phase-transition {
-            transition: opacity 0.2s ease;
+        @keyframes pulse-rec {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
-        .go-pulse {
-            animation: goPulse 0.8s ease-in-out infinite;
+        .log-container {
+            height: 250px;
+            overflow-y: auto;
+            font-family: monospace;
+            background: #1e293b;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
         }
-        @keyframes goPulse {
-            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
-            70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(74, 222, 128, 0); }
-            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        .timer-glow {
+            text-shadow: 0 0 15px rgba(56, 189, 248, 0.6);
         }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
     </style>
 </head>
-<body>
+<body class="h-screen flex flex-col">
 
-    <!-- PRELOAD GAMBAR TERSEMBUNYI UNTUK MENGHILANGKAN DELAY -->
-    <div style="display: none;">
-        <img id="preload-ext" src="https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(7).png" alt="preload">
-        <img id="preload-flex" src="https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(8).png" alt="preload">
-    </div>
-
-    <!-- HALAMAN SETUP -->
-    <div id="setup-screen" class="min-h-screen flex items-center justify-center p-4">
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
-            <h1 class="text-2xl font-bold mb-6 text-center text-blue-400">⚡ Eksperimen Motorik ⚡</h1>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium mb-1">Nama / ID Peserta</label>
-                    <input type="text" id="subject-id" required class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none" placeholder="Contoh: Peserta_01">
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium mb-1">Tangan yang Diuji</label>
-                    <select id="hand-selection" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 focus:outline-none">
-                        <option value="Kanan">Tangan Kanan (Right Hand)</option>
-                        <option value="Kiri">Tangan Kiri (Left Hand)</option>
-                    </select>
-                </div>
-
-                <div class="bg-gray-700/50 p-3 rounded border border-gray-600">
-                    <p class="text-sm font-semibold text-yellow-300 mb-2">🎯 Mode Sesi Berurutan :</p>
-                    <p class="text-xs text-gray-300">ME Latihan (5) → ME Utama (20) → MI Latihan (5) → MI Utama (40)</p>
-                    <p class="text-xs text-gray-400 mt-2">⏱️ Total trials: 70 .</p>
-                </div>
-
-                <div class="pt-4 space-y-3">
-                    <button id="btn-start" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200 shadow">
-                        🧠 Mulai Sesi Lengkap (ME → MI)
-                    </button>
-                    <button id="btn-view-data" class="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold py-2 px-4 rounded transition duration-200 border border-gray-600">
-                        📂 Lihat & Kelola Data
-                    </button>
-                </div>
-            </div>
-            
-            <div id="loading-msg" class="hidden mt-4 text-xs text-yellow-400 text-center animate-pulse">
-                Mempersiapkan sesi eksperimen & preload gambar...
-            </div>
-            <div class="mt-4 text-xs text-gray-500 text-center">
-                Data disimpan per sesi dengan timeline presisi.
-            </div>
+    <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center shadow-lg z-20">
+        <div>
+            <h1 class="text-xl font-bold text-blue-400">🧠 NeuroLab Controller</h1>
+            <p class="text-xs text-slate-400">Mode Dual-Monitor, Custom Camera & Auto-Record</p>
         </div>
-    </div>
+        <div class="flex items-center gap-6">
+            <div id="upload-status" class="hidden items-center gap-2 text-yellow-400 font-bold bg-yellow-900/30 px-4 py-2 rounded-lg border border-yellow-700">
+                <svg class="animate-spin h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                Mengunggah Video...
+            </div>
+            <div class="text-center">
+                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Global Waktu (H:M:S.MS)</p>
+                <div id="global-timer" class="text-3xl font-mono font-bold text-cyan-400 timer-glow">00:00:00.000</div>
+            </div>
+            <button id="btn-emergency-stop" class="hidden bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded font-bold shadow-lg shadow-red-500/20 transition">
+                🛑 HENTIKAN & SIMPAN
+            </button>
+            <button id="btn-view-history" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-bold shadow-lg shadow-indigo-500/20 transition flex items-center gap-2">
+                📂 Riwayat Data
+            </button>
+        </div>
+    </header>
 
-    <!-- HALAMAN DATA -->
-    <div id="data-screen" class="hidden min-h-screen p-6 bg-gray-900">
-        <div class="max-w-6xl mx-auto">
-            <div class="flex justify-between items-center mb-6 flex-wrap gap-3">
+    <main id="main-view" class="flex-1 flex overflow-hidden">
+        
+        <aside class="w-[380px] bg-slate-800 border-r border-slate-700 p-5 flex flex-col gap-4 overflow-y-auto">
+            
+            <!-- Setup 1: Partisipan -->
+            <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 shadow-inner">
+                <h2 class="text-sm font-bold mb-3 text-emerald-400">1. Setup Partisipan</h2>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2">
+                        <label class="block text-xs text-slate-400 mb-1">ID Partisipan</label>
+                        <input type="text" id="subject-id" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white" placeholder="Sbj_01">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-slate-400 mb-1">Tangan Diuji</label>
+                        <select id="hand-selection" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white">
+                            <option value="Kanan">Kanan</option>
+                            <option value="Kiri">Kiri</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Setup 2: Kamera & Layar -->
+            <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 shadow-inner">
+                <h2 class="text-sm font-bold mb-2 text-emerald-400 flex justify-between items-center">
+                    <span>2. Setup Perangkat (Kamera)</span>
+                    <button id="btn-detect-cam" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded">🔄 Deteksi</button>
+                </h2>
+                <p class="text-[10px] text-slate-400 mb-3">Klik deteksi untuk memuat daftar kamera.</p>
+                
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Pilih Kamera Wajah</label>
+                        <select id="cam-face-select" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-xs text-white outline-none">
+                            <option value="">-- Pilih Kamera Wajah --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Pilih Kamera Badan</label>
+                        <select id="cam-body-select" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-xs text-white outline-none">
+                            <option value="">-- Pilih Kamera Badan --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Pilih Kamera Layar/Alat EEG</label>
+                        <select id="cam-eeg-select" class="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-xs text-white outline-none">
+                            <option value="">-- Pilih Kamera Layar/Alat --</option>
+                        </select>
+                    </div>
+                    
+                    <button id="btn-connect-cams" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded text-sm font-bold transition mt-2">
+                        🎥 Hubungkan Semua Kamera
+                    </button>
+                </div>
+            </div>
+
+            <!-- Setup 3: Display Dual Monitor -->
+            <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 shadow-inner">
+                <h2 class="text-sm font-bold mb-3 text-emerald-400">3. Setup Layar Eksperimen</h2>
+                <button id="btn-open-display" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded text-sm font-bold flex justify-between items-center transition">
+                    <span>📺 Buka Jendela Eksperimen</span>
+                    <span id="status-display" class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
+                </button>
+                <p class="text-[10px] text-slate-400 mt-2 text-center">Tarik jendela popup ke monitor ke-2 & tekan F11</p>
+            </div>
+
+            <!-- Setup 4: Control & Log -->
+            <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 flex-1 flex flex-col min-h-[200px]">
+                <button id="btn-start-exp" class="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded font-bold text-lg mb-3 transition shadow-lg shadow-emerald-500/20" disabled>
+                    ▶ MULAI EKSPERIMEN & REKAM
+                </button>
+                
+                <h3 class="text-xs text-slate-400 font-bold uppercase mb-1">Live Event Log</h3>
+                <div id="event-log" class="log-container text-xs text-slate-300 flex-1 border-t-0 rounded-t-none">
+                    <div class="text-slate-500 italic">Menunggu setup...</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- AREA KANAN: Monitoring Kamera -->
+        <section class="flex-1 p-4 bg-slate-950 flex flex-col overflow-y-auto">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg font-bold text-slate-300">Live Monitor & Rekaman Sinkron</h2>
+                <div class="flex gap-2">
+                    <span id="badge-cam" class="px-2 py-1 bg-red-900/50 text-red-400 rounded text-xs font-bold border border-red-800">Cams Offline</span>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 flex-1">
+                <!-- Kam Muka -->
+                <div class="video-container shadow-lg">
+                    <div class="cam-label text-blue-300">📹 CAM 1: WAJAH</div>
+                    <div class="rec-indicator rec-status">🔴 REC</div>
+                    <video id="vid-face" autoplay muted playsinline></video>
+                </div>
+                <!-- Kam Badan -->
+                <div class="video-container shadow-lg">
+                    <div class="cam-label text-green-300">📹 CAM 2: BADAN</div>
+                    <div class="rec-indicator rec-status">🔴 REC</div>
+                    <video id="vid-body" autoplay muted playsinline></video>
+                </div>
+                <!-- Screen Share (Eksperimen / Software EEG) -->
+                <div class="video-container col-span-2 shadow-lg h-[40vh]">
+                    <div class="cam-label text-purple-300">📹 CAM 3: LAYAR / SOFTWARE EEG</div>
+                    <div class="rec-indicator rec-status">🔴 REC</div>
+                    <video id="vid-screen" autoplay muted playsinline></video>
+                </div>
+                
+                <!-- Info Status Session -->
+                <div class="col-span-2 bg-slate-900 border border-slate-700 rounded-lg p-4 flex justify-around items-center text-center shadow-lg">
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Sesi Saat Ini</h3>
+                        <div id="status-session-name" class="text-xl font-bold text-white">-</div>
+                    </div>
+                    <div>
+                        <span class="block text-xs text-slate-400 mb-1">Mode</span>
+                        <span id="status-mode" class="font-bold text-lg text-blue-400 bg-slate-800 px-3 py-1 rounded border border-slate-700">-</span>
+                    </div>
+                    <div>
+                        <span class="block text-xs text-slate-400 mb-1">Trial Berjalan</span>
+                        <span class="font-bold text-xl text-yellow-400 bg-slate-800 px-3 py-1 rounded border border-slate-700"><span id="status-trial">0</span> / <span id="status-total">0</span></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- AREA RIWAYAT DATA (Awalnya Sembunyi) -->
+    <main id="data-view" class="hidden flex-1 flex-col overflow-y-auto bg-slate-900 p-6">
+        <div class="max-w-6xl mx-auto w-full">
+            <div class="flex justify-between items-center mb-6">
                 <div>
                     <h2 class="text-2xl font-bold text-blue-400">Manajemen Data Eksperimen</h2>
-                    <p class="text-gray-400 text-sm">Kelola data peserta eksperimen.</p>
+                    <p class="text-slate-400 text-sm">Log sesi tersimpan di Database Supabase.</p>
                 </div>
                 <div class="flex gap-3">
-                    <button id="btn-download-all" class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 border border-green-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" /></svg>
-                        Unduh Semua (CSV)
+                    <button id="btn-download-all" class="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded font-bold shadow transition flex items-center gap-2">
+                        📥 Unduh Semua (CSV)
                     </button>
-                    <button id="btn-back-setup" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded">← Kembali</button>
+                    <button id="btn-back-main" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded font-bold transition border border-slate-600">
+                        ← Kembali ke Monitor
+                    </button>
                 </div>
             </div>
-            <div class="bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden">
-                <div class="overflow-x-auto max-h-[80vh]">
-                    <table class="w-full text-left text-sm text-gray-300">
-                        <thead class="bg-gray-700 text-gray-100 uppercase sticky top-0 z-10">
+            
+            <div class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 overflow-hidden">
+                <div class="overflow-x-auto max-h-[70vh]">
+                    <table class="w-full text-left text-sm text-slate-300">
+                        <thead class="bg-slate-950 text-slate-300 uppercase sticky top-0 z-10 border-b border-slate-700 text-xs">
                             <tr>
                                 <th class="p-4">Tanggal</th>
-                                <th class="p-4">Peserta</th>
-                                <th class="p-4">Jenis Sesi</th>
+                                <th class="p-4">Partisipan</th>
+                                <th class="p-4">Sesi</th>
                                 <th class="p-4">Mode</th>
                                 <th class="p-4">Tangan</th>
-                                <th class="p-4 text-center">Jml Trial</th>
+                                <th class="p-4 text-center">Trial</th>
                                 <th class="p-4 text-right">Aksi</th>
                             </tr>
                         </thead>
-                        <tbody id="data-table-body">
-                            <tr><td colspan="7" class="p-8 text-center text-gray-500">Klik "Lihat Data" untuk memuat...</td></tr>
+                        <tbody id="data-table-body" class="divide-y divide-slate-700">
+                            <tr><td colspan="7" class="p-8 text-center text-slate-500">Memuat data...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- MODAL DETAIL -->
-    <div id="detail-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-        <div class="bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-gray-600">
-            <div class="p-5 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-lg">
+    <div id="detail-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-slate-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-600">
+            <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-900 rounded-t-lg">
                 <h3 class="text-xl font-bold text-blue-400">Rincian Trial Sesi</h3>
-                <button id="close-modal-btn" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+                <button id="close-modal-btn" class="text-slate-400 hover:text-white text-3xl transition">&times;</button>
             </div>
             <div class="p-6 overflow-y-auto flex-1">
-                <div id="modal-session-info" class="mb-6 grid grid-cols-2 gap-4 text-sm bg-gray-700 p-4 rounded"></div>
-                <h4 class="text-sm font-bold mb-3">Log Trial</h4>
-                <div class="overflow-hidden rounded border border-gray-700">
+                <div id="modal-session-info" class="mb-6 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm bg-slate-900 border border-slate-700 p-4 rounded-lg"></div>
+                
+                <h4 class="text-sm font-bold text-slate-300 mb-3 uppercase tracking-widest">Daftar Trial</h4>
+                <div class="overflow-hidden rounded border border-slate-700">
                     <table class="w-full text-left text-sm">
-                        <thead class="bg-gray-900">
-                            <tr><th class="p-3 text-center">No</th><th class="p-3">Instruksi</th><th class="p-3 text-right">Waktu Aksi</th></tr>
+                        <thead class="bg-slate-950 text-slate-400 text-xs uppercase">
+                            <tr><th class="p-3 text-center">No</th><th class="p-3">Instruksi</th><th class="p-3 text-right">Waktu Aksi (Relatif)</th></tr>
                         </thead>
-                        <tbody id="modal-trial-list"></tbody>
+                        <tbody id="modal-trial-list" class="divide-y divide-slate-700 text-slate-300"></tbody>
                     </table>
                 </div>
             </div>
-            <div class="p-4 border-t border-gray-700 text-right bg-gray-900 rounded-b-lg">
-                <button id="close-modal-footer-btn" class="bg-gray-600 hover:bg-gray-500 text-white px-6 py-2 rounded">Tutup</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- HALAMAN EKSPERIMEN -->
-    <div id="experiment-screen" class="hidden h-screen w-screen relative bg-black">
-        <div class="absolute top-0 left-0 w-full h-1 bg-gray-800">
-            <div id="progress-bar" class="h-full bg-blue-500 transition-all duration-300" style="width: 0%"></div>
-        </div>
-        
-        <div class="absolute top-3 left-4 bg-gray-900 bg-opacity-80 px-4 py-2 rounded-lg border border-gray-700 shadow-lg z-20">
-            <span class="text-xs text-gray-400 uppercase tracking-wide">Tangan diuji</span>
-            <div id="hand-display" class="text-xl font-bold text-green-400">Kanan</div>
-        </div>
-        
-        <div class="absolute top-16 right-4 text-gray-500 text-sm z-20">
-            Trial: <span id="trial-counter">0</span>/<span id="total-trials">0</span>
-            <span id="session-mode-badge" class="ml-2 px-2 py-0.5 rounded text-xs font-bold bg-blue-800 text-blue-200">ME</span>
-        </div>
-
-        <div class="center-absolute">
-            <div id="fixation" class="hidden"><div class="fixation-cross">+</div></div>
-            <div id="instruction" class="hidden">
-                <img id="instruction-img" class="instruction-img mx-auto h-56 object-contain mb-4 rounded-lg border-2 border-gray-600 shadow-2xl" style="background: #111827;" alt="Instruksi Gerakan">
-                <h2 id="instruction-text" class="text-3xl font-bold text-yellow-400 uppercase"></h2>
-            </div>
-            <div id="action-phase" class="hidden">
-                <div class="w-32 h-32 rounded-full border-4 border-green-500 flex items-center justify-center mx-auto mb-6 bg-green-900 bg-opacity-20 go-pulse">
-                    <span class="text-4xl font-bold text-green-400">GO</span>
-                </div>
-                <h2 id="action-text" class="text-4xl font-bold text-white uppercase"></h2>
-                <p class="text-sm text-gray-400 mt-4">Waktu aksi: 4 detik</p>
-            </div>
-            <div id="rest-phase" class="hidden">
-                <h2 class="text-2xl text-gray-400 mb-2">Istirahat</h2>
-                <div class="countdown-number" id="rest-timer">5</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- HALAMAN TRANSISI -->
-    <div id="transition-screen" class="hidden min-h-screen flex items-center justify-center p-4 bg-gray-900">
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl max-w-md w-full text-center border border-gray-600">
-            <h2 id="transition-title" class="text-2xl font-bold mb-4">✨ Sesi Selesai ✨</h2>
-            <p id="transition-message" class="text-gray-300 mb-6"></p>
-            <div class="flex gap-4">
-                <button id="btn-next-session" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition">▶ Lanjut ke Sesi Berikutnya</button>
-                <button id="btn-back-menu" class="flex-1 bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded transition">🏠 Kembali ke Menu Utama</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- HALAMAN SELESAI -->
-    <div id="result-screen" class="hidden min-h-screen flex items-center justify-center p-4">
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-lg text-center border border-gray-700">
-            <h2 class="text-3xl font-bold text-green-400 mb-4">✅ Semua Sesi Selesai!</h2>
-            <div id="final-upload-status" class="mb-6 p-3 bg-gray-700 rounded text-sm text-yellow-300">Menyimpan data akhir...</div>
-            <div class="space-y-3">
-                <button id="btn-download-final" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded flex items-center justify-center gap-2">📥 Unduh Semua Data (CSV)</button>
-                <button id="btn-reload" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">🏠 Kembali ke Menu Utama</button>
+            <div class="p-4 border-t border-slate-700 text-right bg-slate-900 rounded-b-lg">
+                <button id="close-modal-footer-btn" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-6 py-2 rounded transition">Tutup</button>
             </div>
         </div>
     </div>
 
     <script>
-        // ==================== KONFIGURASI SUPABASE ====================
+        // ==================== SUPABASE CONFIG ====================
         const SUPABASE_URL = 'https://rkekwnmwuybxzmbptcwh.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_5p4UmkOLs41OWf97B-He4g_A2MRqC7T';
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // URL Gambar (disimpan variabel agar mudah)
-        const IMG_EXTENSION = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(7).png";
-        const IMG_FLEXION = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(8).png";
-        
-        // PRELOAD GAMBAR SECARA EKSPLISIT (memastikan cache penuh)
-        (function preloadImages() {
-            const img1 = new Image();
-            img1.src = IMG_EXTENSION;
-            const img2 = new Image();
-            img2.src = IMG_FLEXION;
-            console.log("Preload gambar selesai diinisiasi");
-        })();
+        // ==================== STATE GLOBAL ====================
+        let expWindow = null;
+        let globalStartTimeMs = null;
+        let globalTimerInterval = null;
+        let forceStop = false;
+        let experimentData = []; 
 
-        // ========== UPDATE SESI DENGAN JUMLAH TRIAL BARU ==========
-        // ME Latihan (5) → ME Utama (20) → MI Latihan (5) → MI Utama (40)
+        // State Media Streams & Recorders
+        let streams = { face: null, body: null, screen: null };
+        let recorders = { face: null, body: null, screen: null };
+        let recordedChunks = { face: [], body: [], screen: [] };
+
+        // Definisi Sesi (Bisa disesuaikan, total 70 trials)
         const SESSION_QUEUE = [
-            { name: "ME_Latihan", mode: "ME", trialsCount: 5, label: "Motor Execution - Latihan (5x)" },
-            { name: "ME_Utama", mode: "ME", trialsCount: 20, label: "Motor Execution - Utama (20x)" },
-            { name: "MI_Latihan", mode: "MI", trialsCount: 5, label: "Motor Imagery - Latihan (5x)" },
-            { name: "MI_Utama", mode: "MI", trialsCount: 40, label: "Motor Imagery - Utama (40x)" }
+            { name: "ME_Latihan", mode: "ME", trialsCount: 5, label: "ME Latihan" },
+            { name: "ME_Utama", mode: "ME", trialsCount: 20, label: "ME Utama" },
+            { name: "MI_Latihan", mode: "MI", trialsCount: 5, label: "MI Latihan" },
+            { name: "MI_Utama", mode: "MI", trialsCount: 40, label: "MI Utama" }
         ];
 
-        // State global
-        let globalConfig = { id: "", hand: "" };
-        let allSessionsData = [];
-        let experimentStartTime = null;
-        let currentTimeouts = [];
-        let currentRestInterval = null;
+        // Konfigurasi Timing (ms)
+        const TIMING = { fixation: 2000, instruction: 2000, action: 4000, rest: 5000 };
+
+        // Aset URL
+        const IMG_EXT = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(7).png";
+        const IMG_FLEX = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(8).png";
 
         // DOM Elements
-        const screens = {
-            setup: document.getElementById('setup-screen'),
-            experiment: document.getElementById('experiment-screen'),
-            result: document.getElementById('result-screen'),
-            data: document.getElementById('data-screen'),
-            transition: document.getElementById('transition-screen')
-        };
+        const elLog = document.getElementById('event-log');
+        const elTimer = document.getElementById('global-timer');
+        const btnStartExp = document.getElementById('btn-start-exp');
+        const btnEmergency = document.getElementById('btn-emergency-stop');
         
-        const phases = {
-            fixation: document.getElementById('fixation'),
-            instruction: document.getElementById('instruction'),
-            action: document.getElementById('action-phase'),
-            rest: document.getElementById('rest-phase')
-        };
-        
-        // ==================== FUNGSI BANTU ====================
-        function formatTime(seconds) {
-            const hrs = Math.floor(seconds / 3600);
-            const mins = Math.floor((seconds % 3600) / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        // Elemen Tambahan UI Riwayat Data
+        const btnViewHistory = document.getElementById('btn-view-history');
+        const mainView = document.getElementById('main-view');
+        const dataView = document.getElementById('data-view');
+
+        // ==================== LOGGING & UTILS ====================
+        function addLog(message, type = 'info') {
+            const timeStr = globalStartTimeMs ? formatTimerMs(Date.now() - globalStartTimeMs) : 'SETUP';
+            const div = document.createElement('div');
+            
+            let colorClass = 'text-slate-300';
+            if(type === 'error') colorClass = 'text-red-400 font-bold';
+            if(type === 'success') colorClass = 'text-emerald-400 font-bold';
+            if(type === 'warning') colorClass = 'text-yellow-400';
+
+            div.className = `mb-1 border-b border-slate-700/50 pb-1 ${colorClass}`;
+            div.innerHTML = `<span class="text-cyan-500 font-bold">[${timeStr}]</span> ${message}`;
+            elLog.appendChild(div);
+            elLog.scrollTop = elLog.scrollHeight;
         }
-        
-        function getRelativeTime() {
-            if (!experimentStartTime) return "00:00:00";
-            return formatTime((Date.now() - experimentStartTime) / 1000);
+
+        function formatTimerMs(ms) {
+            if (ms < 0) ms = 0;
+            let date = new Date(ms);
+            let h = String(date.getUTCHours()).padStart(2, '0');
+            let m = String(date.getUTCMinutes()).padStart(2, '0');
+            let s = String(date.getUTCSeconds()).padStart(2, '0');
+            let mil = String(date.getUTCMilliseconds()).padStart(3, '0');
+            return `${h}:${m}:${s}.${mil}`;
         }
-        
-        function shuffleArray(arr) {
-            for (let i = arr.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [arr[i], arr[j]] = [arr[j], arr[i]];
-            }
-            return arr;
-        }
-        
-        function generateSequence(count) {
+
+        function generateTrials(count) {
             let seq = [];
             let half = Math.floor(count / 2);
             for (let i = 0; i < half; i++) seq.push("Extension");
             for (let i = 0; i < half; i++) seq.push("Flexion");
             if (count % 2 !== 0) seq.push(Math.random() > 0.5 ? "Extension" : "Flexion");
-            return shuffleArray(seq);
-        }
-        
-        function switchScreen(screenName) {
-            Object.keys(screens).forEach(key => {
-                if (screens[key]) screens[key].classList.add('hidden');
-            });
-            if (screens[screenName]) screens[screenName].classList.remove('hidden');
-        }
-        
-        function showPhase(phaseName) {
-            Object.keys(phases).forEach(key => {
-                if (phases[key]) phases[key].classList.add('hidden');
-            });
-            if (phaseName && phases[phaseName]) phases[phaseName].classList.remove('hidden');
-        }
-        
-        function clearAllTimeouts() {
-            if (currentTimeouts) {
-                currentTimeouts.forEach(t => clearTimeout(t));
-                currentTimeouts = [];
+            // Shuffle
+            for (let i = seq.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [seq[i], seq[j]] = [seq[j], seq[i]];
             }
-            if (currentRestInterval) {
-                clearInterval(currentRestInterval);
-                currentRestInterval = null;
-            }
+            return seq;
         }
-        
-        // ==================== DATABASE ====================
-        async function saveSessionToDB(sessionDef, logsData, startRelative, endRelative) {
-            if (!globalConfig.id) return { success: false };
+
+        // ==================== WAKTU GLOBAL ====================
+        function startGlobalTimer() {
+            if(globalTimerInterval) clearInterval(globalTimerInterval);
+            globalStartTimeMs = Date.now();
+            addLog(`⏱️ GLOBAL WAKTU DIMULAI - MENYINKRONKAN REKAMAN`, 'success');
+            
+            globalTimerInterval = setInterval(() => {
+                const now = Date.now();
+                elTimer.innerText = formatTimerMs(now - globalStartTimeMs);
+            }, 43); // ~24fps update
+        }
+
+        function stopGlobalTimer() {
+            clearInterval(globalTimerInterval);
+            addLog(`⏱️ GLOBAL WAKTU DIHENTIKAN`, 'warning');
+        }
+
+        // ==================== DETEKSI & PILIH KAMERA ====================
+        document.getElementById('btn-detect-cam').addEventListener('click', async () => {
             try {
-                const payload = {
-                    subject_id: globalConfig.id,
-                    hand: globalConfig.hand,
-                    session_type: sessionDef.name,
-                    mode: sessionDef.mode,
-                    trials_data: logsData,
-                    session_start_relative: startRelative,
-                    session_end_relative: endRelative,
-                    session_start_timestamp: new Date().toISOString()
-                };
-                const { error } = await _supabase.from('experiment_sessions').insert(payload);
-                if (error) throw error;
-                console.log(`✅ Session ${sessionDef.name} (${logsData.length} trials) saved`);
-                return { success: true };
-            } catch (e) {
-                console.error("Save error:", e);
-                return { success: false, error: e };
+                // Minta izin sementara agar label perangkat terbaca
+                const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                tempStream.getTracks().forEach(track => track.stop()); // Langsung matikan
+
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoInputs = devices.filter(device => device.kind === 'videoinput');
+                
+                const selFace = document.getElementById('cam-face-select');
+                const selBody = document.getElementById('cam-body-select');
+                const selEeg = document.getElementById('cam-eeg-select');
+                
+                selFace.innerHTML = '<option value="">-- Pilih Kamera Wajah --</option>';
+                selBody.innerHTML = '<option value="">-- Pilih Kamera Badan --</option>';
+                selEeg.innerHTML = '<option value="">-- Pilih Kamera Layar/Alat --</option>';
+
+                videoInputs.forEach((device, index) => {
+                    const label = device.label || `Kamera ${index + 1}`;
+                    selFace.add(new Option(label, device.deviceId));
+                    selBody.add(new Option(label, device.deviceId));
+                    selEeg.add(new Option(label, device.deviceId));
+                });
+                
+                addLog(`✅ Deteksi berhasil. Ditemukan ${videoInputs.length} kamera.`, 'success');
+            } catch (err) {
+                addLog(`❌ Gagal mendeteksi kamera: ${err.message}`, 'error');
+                alert("Berikan izin kamera ke browser untuk mendeteksi perangkat.");
+            }
+        });
+
+        document.getElementById('btn-connect-cams').addEventListener('click', async () => {
+            const faceId = document.getElementById('cam-face-select').value;
+            const bodyId = document.getElementById('cam-body-select').value;
+            const eegId = document.getElementById('cam-eeg-select').value;
+
+            if(!faceId) { alert("Pilih Kamera Wajah minimal untuk merekam!"); return; }
+
+            try {
+                // Connect Face Cam
+                streams.face = await navigator.mediaDevices.getUserMedia({ 
+                    video: { deviceId: { exact: faceId }, width: 1280, height: 720 } 
+                });
+                document.getElementById('vid-face').srcObject = streams.face;
+                addLog('✅ Kamera Wajah terhubung');
+
+                // Connect Body Cam
+                if(bodyId) {
+                    if(bodyId === faceId || bodyId === eegId) {
+                        addLog('⚠️ Peringatan: Kamera Badan menggunakan device yang sama dengan kamera lain.', 'warning');
+                    }
+                    streams.body = await navigator.mediaDevices.getUserMedia({ 
+                        video: { deviceId: { exact: bodyId }, width: 1280, height: 720 } 
+                    });
+                    document.getElementById('vid-body').srcObject = streams.body;
+                    addLog('✅ Kamera Badan terhubung');
+                } else {
+                    addLog('⚠️ Kamera Badan tidak dipilih.', 'warning');
+                }
+
+                // Connect EEG / Screen Monitor Cam
+                if(eegId) {
+                    if(eegId === faceId) {
+                        addLog('⚠️ Peringatan: Kamera ke-3 menggunakan device yang sama dengan wajah.', 'warning');
+                    }
+                    streams.screen = await navigator.mediaDevices.getUserMedia({ 
+                        video: { deviceId: { exact: eegId }, width: 1280, height: 720 } 
+                    });
+                    document.getElementById('vid-screen').srcObject = streams.screen;
+                    addLog('✅ Kamera ke-3 (Alat/Layar) terhubung');
+                } else {
+                    addLog('⚠️ Kamera ke-3 (Alat/Layar) tidak dipilih.', 'warning');
+                }
+
+                document.getElementById('badge-cam').className = "px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-bold border border-green-800";
+                document.getElementById('badge-cam').innerText = "Cams Ready";
+                checkReadyToStart();
+
+            } catch (err) {
+                addLog(`❌ Error akses kamera: ${err.message}`, 'error');
+            }
+        });
+
+        // ==================== BUKA LAYAR EKSPERIMEN (POPUP) ====================
+        document.getElementById('btn-open-display').addEventListener('click', () => {
+            if(expWindow && !expWindow.closed) {
+                expWindow.focus();
+                return;
+            }
+
+            expWindow = window.open('', 'ExperimentDisplay', 'width=1024,height=768');
+            
+            if (!expWindow || expWindow.closed || typeof expWindow.closed == 'undefined') {
+                alert('Popup diblokir! Tolong izinkan pop-ups (ikon di URL bar).');
+                return;
+            }
+
+            // Tulis UI Eksperimen ke window baru
+            expWindow.document.write(`
+                <!DOCTYPE html>
+                <html lang="id">
+                <head>
+                    <title>Layar Eksperimen Partisipan</title>
+                    <script src="https://cdn.tailwindcss.com"><\/script>
+                    <style>
+                        body { background-color: #000; color: white; margin: 0; overflow: hidden; font-family: sans-serif; cursor: none; }
+                        .center-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; width: 100%; }
+                        
+                        .fixation-cross { font-size: 8rem; font-weight: bold; color: white; text-shadow: 0 0 20px rgba(59,130,246,0.6); animation: pulse 1s infinite alternate;}
+                        @keyframes pulse { from { opacity: 0.8; transform: scale(1); } to { opacity: 1; transform: scale(1.05); } }
+                        
+                        .go-pulse { animation: goPulse 0.8s ease-in-out infinite; }
+                        @keyframes goPulse {
+                            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+                            70% { transform: scale(1.05); box-shadow: 0 0 0 30px rgba(74, 222, 128, 0); }
+                            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+                        }
+                        .countdown-number { font-size: 8rem; font-weight: bold; font-family: monospace; }
+                        .hidden-preload { display: none; }
+                    </style>
+                </head>
+                <body>
+                    <div class="hidden-preload">
+                        <img src="${IMG_EXT}">
+                        <img src="${IMG_FLEX}">
+                    </div>
+
+                    <!-- Fase Layar -->
+                    <div id="standby" class="center-content">
+                        <h1 class="text-4xl text-slate-500">Menunggu Controller...</h1>
+                    </div>
+                    <div id="fixation" class="center-content hidden"><div class="fixation-cross">+</div></div>
+                    <div id="instruction" class="center-content hidden">
+                        <img id="inst-img" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-slate-700 bg-slate-900 shadow-2xl" src="">
+                        <h2 id="inst-text" class="text-6xl font-bold text-yellow-400 uppercase tracking-widest"></h2>
+                    </div>
+                    <div id="action" class="center-content hidden">
+                        <div class="w-48 h-48 rounded-full border-8 border-green-500 flex items-center justify-center mx-auto mb-8 bg-green-900/30 go-pulse">
+                            <span class="text-6xl font-bold text-green-400">GO</span>
+                        </div>
+                        <h2 id="action-text" class="text-5xl font-bold text-white uppercase tracking-widest"></h2>
+                    </div>
+                    <div id="rest" class="center-content hidden">
+                        <h2 class="text-3xl text-slate-400 mb-4">Istirahat</h2>
+                        <div id="rest-timer" class="countdown-number text-white">5</div>
+                    </div>
+                    <div id="finished" class="center-content hidden">
+                        <h2 class="text-5xl font-bold text-green-400 mb-4">EKSPERIMEN SELESAI</h2>
+                        <p class="text-xl text-slate-400">Mohon tunggu instruksi peneliti.</p>
+                    </div>
+                </body>
+                </html>
+            `);
+            expWindow.document.close();
+
+            const statDisp = document.getElementById('status-display');
+            statDisp.className = "w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]";
+            document.getElementById('btn-open-display').innerHTML = "<span>✅ Jendela Eksperimen Aktif</span>";
+            addLog("Jendela partisipan siap. Seret ke layar partisipan lalu Fullscreen.", "success");
+            
+            checkReadyToStart();
+
+            // Handle tutup window
+            expWindow.addEventListener('beforeunload', () => {
+                statDisp.className = "w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]";
+                btnStartExp.disabled = true;
+                addLog("⚠️ Layar eksperimen ditutup!", "error");
+            });
+        });
+
+        function checkReadyToStart() {
+            const hasDisplay = expWindow && !expWindow.closed;
+            if (hasDisplay) {
+                btnStartExp.disabled = false;
             }
         }
-        
-        // ==================== MENJALANKAN SATU SESI (OPTIMASI GAMBAR) ====================
-        async function runSingleSession(sessionDef, trialsArray, startRelative) {
-            return new Promise((resolve) => {
-                let trialIndex = 0;
-                const logs = [];
-                const totalTrials = trialsArray.length;
-                
-                const trialCounter = document.getElementById('trial-counter');
-                const totalTrialsSpan = document.getElementById('total-trials');
-                const progressBar = document.getElementById('progress-bar');
-                const sessionModeBadge = document.getElementById('session-mode-badge');
-                const instructionImg = document.getElementById('instruction-img');
-                
-                totalTrialsSpan.innerText = totalTrials;
-                sessionModeBadge.innerText = sessionDef.mode;
-                sessionModeBadge.className = sessionDef.mode === 'ME' 
-                    ? "ml-2 px-2 py-0.5 rounded text-xs font-bold bg-blue-800 text-blue-200" 
-                    : "ml-2 px-2 py-0.5 rounded text-xs font-bold bg-purple-800 text-purple-200";
-                progressBar.style.width = "0%";
-                
-                function updateInstructionImage(type) {
-                    if (type === 'Extension') {
-                        instructionImg.src = IMG_EXTENSION;
-                    } else {
-                        instructionImg.src = IMG_FLEXION;
-                    }
-                    instructionImg.style.opacity = "1";
-                }
-                
-                function finishSession() {
-                    clearAllTimeouts();
-                    const endRelative = getRelativeTime();
-                    saveSessionToDB(sessionDef, logs, startRelative, endRelative).then(() => {
-                        allSessionsData.push({
-                            sessionType: sessionDef.name,
-                            mode: sessionDef.mode,
-                            hand: globalConfig.hand,
-                            subjectId: globalConfig.id,
-                            logs: [...logs],
-                            sessionStartRelative: startRelative,
-                            sessionEndRelative: endRelative
-                        });
-                        resolve();
-                    }).catch(() => resolve());
-                }
-                
-                function runTrial() {
-                    if (trialIndex >= totalTrials) {
-                        finishSession();
-                        return;
-                    }
-                    
-                    const instructionType = trialsArray[trialIndex];
-                    trialCounter.innerText = trialIndex + 1;
-                    const currentProgress = ((trialIndex) / totalTrials) * 100;
-                    progressBar.style.width = `${currentProgress}%`;
-                    
-                    // FIXATION (2 detik)
-                    showPhase('fixation');
-                    const t1 = setTimeout(() => {
-                        // INSTRUCTION (2 detik)
-                        const instructionText = document.getElementById('instruction-text');
-                        updateInstructionImage(instructionType);
-                        instructionText.innerText = instructionType === 'Extension' ? "WRIST EXTENSION" : "WRIST FLEXION";
-                        showPhase('instruction');
-                        
-                        const t2 = setTimeout(() => {
-                            const actionStartTime = new Date().toISOString();
-                            const actionText = document.getElementById('action-text');
-                            actionText.innerText = sessionDef.mode === 'ME' ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN";
-                            showPhase('action');
-                            
-                            const t3 = setTimeout(() => {
-                                logs.push({
-                                    trial: trialIndex + 1,
-                                    instruction: instructionType,
-                                    start_time: actionStartTime,
-                                    relative_time: getRelativeTime()
-                                });
-                                
-                                // REST 5 detik
-                                showPhase('rest');
-                                let restSec = 5;
-                                const restTimer = document.getElementById('rest-timer');
-                                restTimer.innerText = restSec;
-                                currentRestInterval = setInterval(() => {
-                                    restSec--;
-                                    if (restSec <= 0) {
-                                        clearInterval(currentRestInterval);
-                                        currentRestInterval = null;
-                                        trialIndex++;
-                                        runTrial();
-                                    } else {
-                                        restTimer.innerText = restSec;
-                                    }
-                                }, 1000);
-                                currentTimeouts.push(currentRestInterval);
-                            }, 4000);
-                            currentTimeouts.push(t3);
-                        }, 2000);
-                        currentTimeouts.push(t2);
-                    }, 2000);
-                    currentTimeouts.push(t1);
-                }
-                
-                runTrial();
-            });
-        }
-        
-        // ==================== EKSPERIMEN UTAMA ====================
-        async function startFullExperiment() {
-            experimentStartTime = Date.now();
-            const handDisplay = document.getElementById('hand-display');
-            handDisplay.innerText = globalConfig.hand;
-            handDisplay.className = globalConfig.hand === 'Kanan' 
-                ? "text-xl font-bold text-green-400" 
-                : "text-xl font-bold text-yellow-400";
+
+        // ==================== RECORDING ENGINE ====================
+        function startRecordingStreams() {
+            recordedChunks = { face: [], body: [], screen: [] };
             
-            switchScreen('experiment');
-            await new Promise(r => setTimeout(r, 300));
-            
-            for (let idx = 0; idx < SESSION_QUEUE.length; idx++) {
-                const sessionDef = SESSION_QUEUE[idx];
-                const generatedTrials = generateSequence(sessionDef.trialsCount);
-                const sessionStartRelative = getRelativeTime();
-                
-                await runSingleSession(sessionDef, generatedTrials, sessionStartRelative);
-                
-                if (idx < SESSION_QUEUE.length - 1) {
-                    // Tampilkan transisi
-                    switchScreen('transition');
-                    const transitionTitle = document.getElementById('transition-title');
-                    const transitionMessage = document.getElementById('transition-message');
-                    transitionTitle.innerHTML = "✅ Sesi Selesai";
-                    transitionMessage.innerHTML = `Sesi <strong>${sessionDef.label}</strong> telah selesai.<br>Selanjutnya: <strong class="text-purple-400">${SESSION_QUEUE[idx+1].label}</strong>`;
-                    
-                    const userChoice = await new Promise((resolve) => {
-                        const nextBtn = document.getElementById('btn-next-session');
-                        const backBtn = document.getElementById('btn-back-menu');
-                        const handlerNext = () => { cleanup(); resolve('next'); };
-                        const handlerBack = () => { cleanup(); resolve('back'); };
-                        const cleanup = () => {
-                            nextBtn.removeEventListener('click', handlerNext);
-                            backBtn.removeEventListener('click', handlerBack);
+            const options = { mimeType: 'video/webm; codecs=vp9' }; // Optimal untuk web
+
+            ['face', 'body', 'screen'].forEach(type => {
+                if (streams[type]) {
+                    try {
+                        const recorder = new MediaRecorder(streams[type], options);
+                        recorder.ondataavailable = e => {
+                            if (e.data && e.data.size > 0) {
+                                recordedChunks[type].push(e.data);
+                            }
                         };
-                        nextBtn.addEventListener('click', handlerNext);
-                        backBtn.addEventListener('click', handlerBack);
+                        recorder.start(1000); // Kumpulkan chunk tiap detik
+                        recorders[type] = recorder;
+                        addLog(`⏺️ Recording dimulai untuk ${type.toUpperCase()}`);
+                    } catch (e) {
+                        addLog(`❌ Gagal memulai rekaman ${type}: ${e.message}`, 'error');
+                    }
+                }
+            });
+
+            // Tampilkan UI indikator recording
+            document.querySelectorAll('.rec-status').forEach(el => el.style.display = 'block');
+        }
+
+        function stopRecordingStreams() {
+            ['face', 'body', 'screen'].forEach(type => {
+                if (recorders[type] && recorders[type].state !== "inactive") {
+                    recorders[type].stop();
+                    addLog(`⏹️ Recording berhenti untuk ${type.toUpperCase()}`);
+                }
+            });
+            document.querySelectorAll('.rec-status').forEach(el => el.style.display = 'none');
+        }
+
+        async function processAndUploadVideos(subjectId) {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const uploadIndicator = document.getElementById('upload-status');
+            uploadIndicator.classList.remove('hidden');
+            uploadIndicator.classList.add('flex');
+            
+            addLog(`⏳ Mulai mengompres dan mengunggah video ke Storage...`, 'warning');
+
+            const uploadTasks = [];
+
+            for (const type of ['face', 'body', 'screen']) {
+                if (recordedChunks[type].length > 0) {
+                    const blob = new Blob(recordedChunks[type], { type: 'video/webm' });
+                    const filename = `${subjectId}_${timestamp}_${type.toUpperCase()}.webm`;
+                    addLog(`📤 Mengunggah ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)...`);
+                    
+                    // Supabase Upload
+                    const task = _supabase.storage.from('video').upload(filename, blob, {
+                        cacheControl: '3600',
+                        upsert: false
+                    }).then(({ data, error }) => {
+                        if (error) {
+                            addLog(`❌ Gagal unggah ${filename}: ${error.message}`, 'error');
+                        } else {
+                            addLog(`✅ Berhasil unggah: ${filename}`, 'success');
+                        }
                     });
                     
-                    if (userChoice === 'back') {
-                        switchScreen('setup');
-                        return;
-                    }
-                    switchScreen('experiment');
-                    await new Promise(r => setTimeout(r, 200));
+                    uploadTasks.push(task);
                 }
             }
+
+            await Promise.all(uploadTasks);
             
-            // Selesai semua
-            switchScreen('result');
-            const finalMsg = document.getElementById('final-upload-status');
-            finalMsg.innerText = `✅ Semua data tersimpan. Total trials: 70 | Durasi: ${getRelativeTime()}`;
-            finalMsg.className = "mb-6 p-3 bg-green-900 rounded text-sm text-green-200";
+            uploadIndicator.classList.add('hidden');
+            uploadIndicator.classList.remove('flex');
+            addLog(`🎉 Seluruh file media selesai diproses/diunggah.`, 'success');
         }
+
+        // ==================== EXPERIMENT ENGINE ====================
+        function setPhase(phaseName) {
+            if (!expWindow || expWindow.closed) return;
+            const doc = expWindow.document;
+            ['standby', 'fixation', 'instruction', 'action', 'rest', 'finished'].forEach(p => {
+                doc.getElementById(p).classList.add('hidden');
+            });
+            doc.getElementById(phaseName).classList.remove('hidden');
+        }
+
+        let currentTimeout = null;
+        let restInterval = null;
+
+        async function wait(ms) {
+            return new Promise(resolve => {
+                currentTimeout = setTimeout(resolve, ms);
+            });
+        }
+
+        // EMERGENCY STOP
+        document.getElementById('btn-emergency-stop').addEventListener('click', async () => {
+            forceStop = true;
+            if(currentTimeout) clearTimeout(currentTimeout);
+            if(restInterval) clearInterval(restInterval);
+            
+            stopGlobalTimer();
+            stopRecordingStreams();
+            setPhase('finished');
+            
+            btnStartExp.disabled = false;
+            btnStartExp.innerText = "MULAI ULANG EKSPERIMEN";
+            document.getElementById('btn-emergency-stop').classList.add('hidden');
+            
+            addLog("🛑 EKSPERIMEN DIHENTIKAN PAKSA! Menyimpan file...", 'error');
+            
+            // Proses Upload Video
+            const subjectId = document.getElementById('subject-id').value.trim() || "Unknown";
+            const hand = document.getElementById('hand-selection').value;
+            await processAndUploadVideos(subjectId);
+            await saveAllDataToDB(subjectId, hand);
+            downloadCSV(subjectId);
+        });
+
+        // START EXPERIMENT BUTTON
+        btnStartExp.addEventListener('click', async () => {
+            const subjectId = document.getElementById('subject-id').value.trim();
+            if (!subjectId) {
+                alert("Masukkan ID Partisipan terlebih dahulu!");
+                return;
+            }
+
+            if (!expWindow || expWindow.closed) {
+                alert("Buka jendela eksperimen terlebih dahulu!");
+                return;
+            }
+
+            // Persiapan UI
+            forceStop = false;
+            btnStartExp.disabled = true;
+            document.getElementById('btn-emergency-stop').classList.remove('hidden');
+            experimentData = []; // reset data
+            
+            // 1. MULAI WAKTU GLOBAL & RECORDING
+            startGlobalTimer();
+            startRecordingStreams();
+
+            addLog("Mempersiapkan baseline (5 detik)...");
+            
+            // Baseline prep di layar subjek
+            setPhase('standby');
+            expWindow.document.getElementById('standby').innerHTML = '<h1 class="text-4xl text-slate-500">Mulai dalam <span id="prep-cnt" class="text-white font-bold text-5xl">5</span>...</h1>';
+            
+            for(let i=5; i>0; i--) {
+                if(forceStop) return;
+                expWindow.document.getElementById('prep-cnt').innerText = i;
+                await wait(1000);
+            }
+
+            // 2. Loop Sesi
+            for (let sIdx = 0; sIdx < SESSION_QUEUE.length; sIdx++) {
+                if(forceStop) return;
+                
+                const session = SESSION_QUEUE[sIdx];
+                const trials = generateTrials(session.trialsCount);
+                
+                addLog(`▶️ Memulai Sesi: ${session.label}`, 'info');
+                document.getElementById('status-session-name').innerText = session.label;
+                document.getElementById('status-mode').innerText = session.mode;
+                document.getElementById('status-total').innerText = session.trialsCount;
+
+                const sessionStartRelative = formatTimerMs(Date.now() - globalStartTimeMs);
+                let sessionLogs = [];
+
+                // Loop Trial
+                for (let tIdx = 0; tIdx < trials.length; tIdx++) {
+                    if(forceStop) break;
+                    
+                    const instructionType = trials[tIdx];
+                    const trialNum = tIdx + 1;
+                    document.getElementById('status-trial').innerText = trialNum;
+                    
+                    // --- PHASE 1: FIXATION ---
+                    setPhase('fixation');
+                    await wait(TIMING.fixation);
+                    if(forceStop) break;
+
+                    // --- PHASE 2: INSTRUCTION ---
+                    expWindow.document.getElementById('inst-img').src = (instructionType === 'Extension') ? IMG_EXT : IMG_FLEX;
+                    expWindow.document.getElementById('inst-text').innerText = `WRIST ${instructionType.toUpperCase()}`;
+                    setPhase('instruction');
+                    await wait(TIMING.instruction);
+                    if(forceStop) break;
+
+                    // --- PHASE 3: ACTION / GO ---
+                    const actionStartTimeMs = Date.now() - globalStartTimeMs;
+                    const actionTimeStr = formatTimerMs(actionStartTimeMs);
+                    
+                    expWindow.document.getElementById('action-text').innerText = (session.mode === 'ME') ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN";
+                    setPhase('action');
+                    
+                    addLog(`Trial ${trialNum}/${session.trialsCount} | ${instructionType} | Action: ${actionTimeStr}`);
+                    
+                    sessionLogs.push({
+                        trial: trialNum,
+                        instruction: instructionType,
+                        global_timestamp_ms: actionStartTimeMs,
+                        global_timestamp_str: actionTimeStr
+                    });
+
+                    await wait(TIMING.action);
+                    if(forceStop) break;
+
+                    // --- PHASE 4: REST ---
+                    setPhase('rest');
+                    let restCount = TIMING.rest / 1000;
+                    expWindow.document.getElementById('rest-timer').innerText = restCount;
+                    
+                    await new Promise(resolve => {
+                        restInterval = setInterval(() => {
+                            restCount--;
+                            if (restCount <= 0) {
+                                clearInterval(restInterval);
+                                resolve();
+                            } else {
+                                expWindow.document.getElementById('rest-timer').innerText = restCount;
+                            }
+                        }, 1000);
+                    });
+                }
+
+                if(forceStop) break;
+
+                const sessionEndRelative = formatTimerMs(Date.now() - globalStartTimeMs);
+                experimentData.push({ sessionDef: session, startTime: sessionStartRelative, endTime: sessionEndRelative, logs: sessionLogs });
+
+                // Transisi antar sesi (Jeda 5s)
+                if (sIdx < SESSION_QUEUE.length - 1) {
+                    setPhase('standby');
+                    expWindow.document.getElementById('standby').innerHTML = `
+                        <h1 class="text-4xl text-green-400 mb-4">Sesi Selesai</h1>
+                        <p class="text-xl text-slate-400">Sesi selanjutnya: ${SESSION_QUEUE[sIdx+1].label}</p>
+                        <p class="text-lg text-slate-500 mt-8">Bersiap dalam <span id="jeda-cnt">5</span> detik...</p>
+                    `;
+                    for(let i=5; i>0; i--) {
+                        if(forceStop) break;
+                        expWindow.document.getElementById('jeda-cnt').innerText = i;
+                        await wait(1000);
+                    }
+                }
+            }
+
+            // EKSPERIMEN NORMAL SELESAI
+            if(!forceStop) {
+                stopGlobalTimer();
+                stopRecordingStreams();
+                setPhase('finished');
+                document.getElementById('btn-emergency-stop').classList.add('hidden');
+                btnStartExp.innerText = "EKSPERIMEN SELESAI";
+                
+                addLog("🎉 SELURUH RANGKAIAN EKSPERIMEN SELESAI", 'success');
+                
+                // Upload & Download
+                const hand = document.getElementById('hand-selection').value;
+                await processAndUploadVideos(subjectId);
+                await saveAllDataToDB(subjectId, hand);
+                downloadCSV(subjectId);
+            }
+        });
+
+        // DOWNLOAD CSV LOG
+        function downloadCSV(subjectId) {
+            if (experimentData.length === 0) return;
+            
+            const hand = document.getElementById('hand-selection').value;
+            let csv = "Subject,Hand,Session,Mode,Trial,Instruction,GlobalTimestamp_ms,GlobalTimestamp_String\n";
+            
+            experimentData.forEach(sessionData => {
+                sessionData.logs.forEach(log => {
+                    csv += `"${subjectId}","${hand}","${sessionData.sessionDef.label}","${sessionData.sessionDef.mode}",${log.trial},"${log.instruction}",${log.global_timestamp_ms},"${log.global_timestamp_str}"\n`;
+                });
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Log_NeuroLab_${subjectId}_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            addLog("📂 File CSV log penanda waktu berhasil diunduh.", 'success');
+        }
+
+        // ==================== DATABASE & HISTORY UI ====================
         
-        // ==================== DATA MANAGEMENT ====================
+        // Simpan data ke Database Supabase
+        async function saveAllDataToDB(subjectId, hand) {
+            addLog("⏳ Menyimpan log timeline ke Database...", "warning");
+            try {
+                const insertPromises = experimentData.map(data => {
+                    return _supabase.from('experiment_sessions').insert({
+                        subject_id: subjectId,
+                        hand: hand,
+                        session_type: data.sessionDef.label,
+                        mode: data.sessionDef.mode,
+                        session_start_relative: data.startTime,
+                        session_end_relative: data.endTime,
+                        trials_data: data.logs
+                    });
+                });
+                
+                await Promise.all(insertPromises);
+                addLog("✅ Log timeline berhasil diamankan di Database.", "success");
+            } catch (err) {
+                addLog("❌ Gagal menyimpan log ke Database: " + err.message, "error");
+            }
+        }
+
+        // Toggle Antarmuka
+        btnViewHistory.addEventListener('click', () => {
+            mainView.classList.add('hidden');
+            dataView.classList.remove('hidden');
+            dataView.classList.add('flex');
+            fetchDataHistory();
+        });
+
+        document.getElementById('btn-back-main').addEventListener('click', () => {
+            dataView.classList.add('hidden');
+            dataView.classList.remove('flex');
+            mainView.classList.remove('hidden');
+        });
+
+        // Ambil Data dari Database
         async function fetchDataHistory() {
             const tbody = document.getElementById('data-table-body');
-            tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500">Memuat data...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">Memuat data dari database...</td></tr>';
             
             try {
                 const { data, error } = await _supabase
@@ -553,45 +916,38 @@
                 if (error) throw error;
                 
                 if (!data || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500">Belum ada data</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">Belum ada riwayat eksperimen.</td></tr>';
                     return;
                 }
                 
                 tbody.innerHTML = '';
                 data.forEach((row) => {
                     const tr = document.createElement('tr');
-                    tr.className = "border-b border-gray-700 hover:bg-gray-750";
+                    tr.className = "hover:bg-slate-800/50 transition duration-150";
                     const date = new Date(row.created_at).toLocaleString('id-ID');
+                    
+                    const badgeClass = row.mode === 'ME' ? 'bg-blue-900/50 text-blue-300 border-blue-800' : 'bg-purple-900/50 text-purple-300 border-purple-800';
+                    
                     tr.innerHTML = `
-                        <td class="p-3 text-sm">${date}</td>
-                        <td class="p-3 font-medium">${escapeHtml(row.subject_id)}</td>
-                        <td class="p-3">${row.session_type}</td>
-                        <td class="p-3"><span class="px-2 py-1 rounded text-xs ${row.mode === 'ME' ? 'bg-blue-900 text-blue-200' : 'bg-purple-900 text-purple-200'}">${row.mode}</span></td>
-                        <td class="p-3">${row.hand}</td>
-                        <td class="p-3 text-center">${row.trials_data?.length || 0}</td>
-                        <td class="p-3 text-right">
-                            <button onclick="window.viewSessionDetail('${row.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded text-xs mr-1">Detail</button>
-                            <button onclick="window.deleteSession('${row.id}')" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">Hapus</button>
+                        <td class="p-4 text-sm">${date}</td>
+                        <td class="p-4 font-bold text-white">${row.subject_id}</td>
+                        <td class="p-4 text-slate-300">${row.session_type}</td>
+                        <td class="p-4"><span class="px-2 py-1 rounded text-xs border font-bold ${badgeClass}">${row.mode}</span></td>
+                        <td class="p-4 text-slate-300">${row.hand}</td>
+                        <td class="p-4 text-center font-mono">${row.trials_data?.length || 0}</td>
+                        <td class="p-4 text-right">
+                            <button onclick="window.viewSessionDetail('${row.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-xs font-bold shadow transition mr-2">Detail</button>
+                            <button onclick="window.deleteSession('${row.id}')" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs font-bold shadow transition">Hapus</button>
                         </td>
                     `;
                     tbody.appendChild(tr);
                 });
             } catch (err) {
-                console.error("Fetch error:", err);
                 tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-400">Error: ${err.message}</td></tr>`;
             }
         }
-        
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/[&<>]/g, function(m) {
-                if (m === '&') return '&amp;';
-                if (m === '<') return '&lt;';
-                if (m === '>') return '&gt;';
-                return m;
-            });
-        }
-        
+
+        // Lihat Rincian Data (Modal)
         window.viewSessionDetail = async function(id) {
             try {
                 const { data, error } = await _supabase
@@ -602,29 +958,29 @@
                 
                 if (error) throw error;
                 
-                const infoDiv = document.getElementById('modal-session-info');
-                infoDiv.innerHTML = `
-                    <div><p class="text-gray-400 text-xs">Peserta</p><p class="font-bold text-white">${escapeHtml(data.subject_id)}</p></div>
-                    <div><p class="text-gray-400 text-xs">Tangan</p><p class="font-bold text-white">${data.hand}</p></div>
-                    <div><p class="text-gray-400 text-xs">Sesi</p><p class="font-bold text-white">${data.session_type}</p></div>
-                    <div><p class="text-gray-400 text-xs">Mode</p><p class="font-bold text-white">${data.mode}</p></div>
-                    <div><p class="text-gray-400 text-xs">Mulai Sesi</p><p class="font-mono text-yellow-400">${data.session_start_relative || '-'}</p></div>
-                    <div><p class="text-gray-400 text-xs">Selesai Sesi</p><p class="font-mono text-yellow-400">${data.session_end_relative || '-'}</p></div>
+                document.getElementById('modal-session-info').innerHTML = `
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Partisipan</p><p class="font-bold text-white text-lg">${data.subject_id}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Tangan</p><p class="font-bold text-emerald-400 text-lg">${data.hand}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Sesi</p><p class="font-bold text-slate-300">${data.session_type}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Mode</p><p class="font-bold text-blue-400">${data.mode}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Mulai Sesi</p><p class="font-mono text-yellow-400">${data.session_start_relative || '-'}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Selesai Sesi</p><p class="font-mono text-yellow-400">${data.session_end_relative || '-'}</p></div>
                 `;
                 
                 const trialList = document.getElementById('modal-trial-list');
                 trialList.innerHTML = '';
                 const trials = data.trials_data || [];
+                
                 if (trials.length === 0) {
-                    trialList.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-500">Tidak ada data trial</td></tr>';
+                    trialList.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-slate-500">Tidak ada log gerakan untuk sesi ini.</td></tr>';
                 } else {
                     trials.forEach(t => {
                         const tr = document.createElement('tr');
-                        tr.className = "border-b border-gray-700";
+                        const isExt = t.instruction === 'Extension';
                         tr.innerHTML = `
-                            <td class="p-3 text-center">${t.trial}</td>
-                            <td class="p-3 ${t.instruction === 'Extension' ? 'text-green-400' : 'text-yellow-400'} font-bold">${t.instruction}</td>
-                            <td class="p-3 text-right font-mono text-xs">${new Date(t.start_time).toLocaleTimeString()}</td>
+                            <td class="p-3 text-center text-slate-400">${t.trial}</td>
+                            <td class="p-3 ${isExt ? 'text-emerald-400' : 'text-blue-400'} font-bold">${t.instruction}</td>
+                            <td class="p-3 text-right font-mono text-cyan-300">${t.global_timestamp_str}</td>
                         `;
                         trialList.appendChild(tr);
                     });
@@ -632,42 +988,37 @@
                 
                 document.getElementById('detail-modal').classList.remove('hidden');
             } catch (err) {
-                console.error("Detail error:", err);
-                alert("Gagal memuat detail sesi: " + err.message);
+                alert("Gagal memuat detail: " + err.message);
             }
         };
-        
+
+        // Hapus Data
         window.deleteSession = async function(id) {
-            if (!confirm("Hapus sesi ini? Data tidak dapat dikembalikan.")) return;
+            if (!confirm("⚠️ Peringatan: Hapus log sesi ini? Data tidak dapat dikembalikan.")) return;
             try {
                 const { error } = await _supabase.from('experiment_sessions').delete().eq('id', id);
                 if (error) throw error;
-                alert("Sesi berhasil dihapus");
                 fetchDataHistory();
             } catch (err) {
-                console.error("Delete error:", err);
                 alert("Gagal menghapus sesi: " + err.message);
             }
         };
-        
-        function closeDetailModal() {
-            document.getElementById('detail-modal').classList.add('hidden');
-        }
-        
-        async function downloadAllCSV() {
+
+        // Unduh Semua Data Database
+        document.getElementById('btn-download-all').addEventListener('click', async () => {
             try {
                 const { data, error } = await _supabase.from('experiment_sessions').select('*');
                 if (error) throw error;
                 if (!data || data.length === 0) {
-                    alert("Tidak ada data untuk diunduh");
+                    alert("Tidak ada data untuk diunduh.");
                     return;
                 }
                 
-                let csvRows = ["SubjectID,Hand,SessionType,Mode,SessionStartRelative,SessionEndRelative,TrialNumber,Instruction,Timestamp"];
+                let csvRows = ["SubjectID,Hand,Session,Mode,Trial,Instruction,GlobalTimestamp_ms,GlobalTimestamp_String"];
                 data.forEach(session => {
                     const trials = session.trials_data || [];
                     trials.forEach(trial => {
-                        csvRows.push(`"${session.subject_id}","${session.hand}","${session.session_type}","${session.mode}","${session.session_start_relative || ''}","${session.session_end_relative || ''}",${trial.trial},"${trial.instruction}","${trial.start_time}"`);
+                        csvRows.push(`"${session.subject_id}","${session.hand}","${session.session_type}","${session.mode}",${trial.trial},"${trial.instruction}",${trial.global_timestamp_ms},"${trial.global_timestamp_str}"`);
                     });
                 });
                 
@@ -675,84 +1026,22 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `eksperimen_data_${new Date().toISOString().slice(0,19)}.csv`;
+                a.download = `All_NeuroLab_Logs_${new Date().toISOString().slice(0,10)}.csv`;
                 a.click();
                 URL.revokeObjectURL(url);
             } catch (err) {
-                console.error("Download error:", err);
                 alert("Gagal mengunduh data: " + err.message);
             }
-        }
-        
-        function downloadFinalCSV() {
-            if (allSessionsData.length === 0) {
-                alert("Tidak ada data untuk diunduh");
-                return;
-            }
-            let csvRows = ["SubjectID,Hand,SessionType,Mode,SessionStartRelative,SessionEndRelative,TrialNumber,Instruction,Timestamp"];
-            allSessionsData.forEach(session => {
-                session.logs.forEach(log => {
-                    csvRows.push(`"${session.subjectId}","${session.hand}","${session.sessionType}","${session.mode}","${session.sessionStartRelative}","${session.sessionEndRelative}",${log.trial},"${log.instruction}","${log.start_time}"`);
-                });
-            });
-            const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `eksperimen_${globalConfig.id}_${new Date().toISOString().slice(0,19)}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-        
-        // ==================== EVENT LISTENERS ====================
-        document.getElementById('btn-start').addEventListener('click', async () => {
-            const subjectId = document.getElementById('subject-id').value.trim();
-            if (!subjectId) {
-                alert("Masukkan ID Peserta");
-                return;
-            }
-            globalConfig.id = subjectId;
-            globalConfig.hand = document.getElementById('hand-selection').value;
-            allSessionsData = [];
-            
-            const loadingDiv = document.getElementById('loading-msg');
-            loadingDiv.classList.remove('hidden');
-            try {
-                await startFullExperiment();
-            } catch (err) {
-                console.error(err);
-                alert("Error: " + err.message);
-                switchScreen('setup');
-            } finally {
-                loadingDiv.classList.add('hidden');
-            }
         });
-        
-        document.getElementById('btn-view-data').addEventListener('click', () => {
-            switchScreen('data');
-            fetchDataHistory();
-        });
-        
-        document.getElementById('btn-back-setup').addEventListener('click', () => {
-            switchScreen('setup');
-        });
-        
-        document.getElementById('btn-download-all').addEventListener('click', downloadAllCSV);
-        document.getElementById('btn-download-final').addEventListener('click', downloadFinalCSV);
-        document.getElementById('btn-reload').addEventListener('click', () => {
-            location.reload();
-        });
-        
-        document.getElementById('close-modal-btn').addEventListener('click', closeDetailModal);
-        document.getElementById('close-modal-footer-btn').addEventListener('click', closeDetailModal);
-        
+
+        // Event menutup Modal
+        const closeModals = () => document.getElementById('detail-modal').classList.add('hidden');
+        document.getElementById('close-modal-btn').addEventListener('click', closeModals);
+        document.getElementById('close-modal-footer-btn').addEventListener('click', closeModals);
         document.getElementById('detail-modal').addEventListener('click', (e) => {
-            if (e.target === document.getElementById('detail-modal')) {
-                closeDetailModal();
-            }
+            if (e.target.id === 'detail-modal') closeModals();
         });
-        
-        console.log("🚀 Eksperimen siap - Updated trial counts: ME_Latihan(5), ME_Utama(20), MI_Latihan(5), MI_Utama(40)");
+
     </script>
 </body>
 </html>
