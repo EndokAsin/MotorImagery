@@ -119,6 +119,14 @@
                             <option value="Kiri">Kiri</option>
                         </select>
                     </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-slate-400 mb-1">Mode Eksperimen</label>
+                        <select id="exp-mode-selection" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white">
+                            <option value="ALL">Keduanya (ME & MI Lengkap)</option>
+                            <option value="ME">Hanya ME (Motor Execution)</option>
+                            <option value="MI">Hanya MI (Motor Imagery)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -308,6 +316,7 @@
         let forceStop = false;
         let experimentData = []; 
         let globalExperimentTimestamp = null; // Sinkronisasi nama file video & DB
+        let globalVideoRecordId = null; // Format string aman penyambung URL Video
         let isWaitingForNextSession = false; // Penanda jeda antar sesi
         let resolveNextSession = null; // Fungsi pembuka jeda
 
@@ -317,12 +326,13 @@
         let recordedChunks = { face: [], body: [], screen: [] };
 
         // Definisi Sesi (Bisa disesuaikan, total 70 trials)
-        const SESSION_QUEUE = [
+        const MASTER_SESSION_QUEUE = [
             { name: "ME_Latihan", mode: "ME", trialsCount: 5, label: "ME Latihan" },
             { name: "ME_Utama", mode: "ME", trialsCount: 20, label: "ME Utama" },
             { name: "MI_Latihan", mode: "MI", trialsCount: 5, label: "MI Latihan" },
             { name: "MI_Utama", mode: "MI", trialsCount: 40, label: "MI Utama" }
         ];
+        let SESSION_QUEUE = [];
 
         // Konfigurasi Timing (ms)
         const TIMING = { fixation: 2000, instruction: 2000, action: 4000, rest: 5000 };
@@ -343,6 +353,21 @@
         const dataView = document.getElementById('data-view');
 
         // ==================== LOGGING & UTILS ====================
+        
+        // Fungsi Escape HTML untuk keamanan
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag])
+            );
+        }
+
         function addLog(message, type = 'info') {
             const timeStr = globalStartTimeMs ? formatTimerMs(Date.now() - globalStartTimeMs) : 'SETUP';
             const div = document.createElement('div');
@@ -438,17 +463,17 @@
 
             if(!faceId) { alert("Pilih Kamera Wajah minimal untuk merekam!"); return; }
 
-            // Solusi: Gunakan Fallback. Jika kamera kaku dan menolak kompresi, biarkan pakai resolusi bawaannya.
+            // Fungsi helper agar jika gagal dipaksa 480p, akan pakai setelan bebas (fallback)
             const tryGetStream = async (deviceId, camName) => {
                 try {
-                    // Percobaan 1: Coba dengan resolusi ideal (ukuran kecil)
+                    // Percobaan 1: Maksimalkan kompresi 480p, 15fps (Ukuran ringan)
                     return await navigator.mediaDevices.getUserMedia({ 
                         video: { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } }, 
                         audio: false 
                     });
                 } catch (e) {
-                    addLog(`⚠️ ${camName} menolak kompresi resolusi. Memuat setelan bawaan...`, 'warning');
-                    // Percobaan 2: Jika "tidak bisa dipaksa" (Overconstrained), panggil kamera tanpa batasan resolusi
+                    addLog(`⚠️ ${camName} menolak kompresi. Memuat pengaturan bawaan hardware...`, 'warning');
+                    // Percobaan 2: Jika Overconstrained, lupakan kompresi resolusi dan panggil secara polos
                     return await navigator.mediaDevices.getUserMedia({ 
                         video: { deviceId: { exact: deviceId } }, 
                         audio: false 
@@ -456,7 +481,7 @@
                 }
             };
             
-            // Connect Face Cam
+            // Connect Face Cam (Load 1 per 1 agar jika satu gagal, yang lain tetap diproses)
             try {
                 streams.face = await tryGetStream(faceId, "Kamera Wajah");
                 document.getElementById('vid-face').srcObject = streams.face;
@@ -474,21 +499,17 @@
                 } catch (err) {
                     addLog(`❌ Error Kamera Badan: ${err.message}`, 'error');
                 }
-            } else {
-                addLog('⚠️ Kamera Badan tidak dipilih.', 'warning');
             }
 
             // Connect EEG / Screen Monitor Cam
             if(eegId) {
                 try {
-                    streams.screen = await tryGetStream(eegId, "Kamera ke-3");
+                    streams.screen = await tryGetStream(eegId, "Kamera ke-3 (Alat/Layar)");
                     document.getElementById('vid-screen').srcObject = streams.screen;
-                    addLog('✅ Kamera ke-3 (Alat/Layar) terhubung');
+                    addLog('✅ Kamera ke-3 terhubung');
                 } catch (err) {
                     addLog(`❌ Error Kamera ke-3: ${err.message}`, 'error');
                 }
-            } else {
-                addLog('⚠️ Kamera ke-3 (Alat/Layar) tidak dipilih.', 'warning');
             }
 
             document.getElementById('badge-cam').className = "px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-bold border border-green-800";
@@ -597,7 +618,7 @@
             const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp8') ? 'video/webm; codecs=vp8' : 'video/webm';
             const options = { 
                 mimeType: mimeType,
-                videoBitsPerSecond: 250000 // 250 kbps (membuat file sangat kecil, ~112MB per jam per kamera)
+                videoBitsPerSecond: 250000 // 250 kbps agar file ringan (berguna jika berjam-jam)
             };
 
             ['face', 'body', 'screen'].forEach(type => {
@@ -633,8 +654,8 @@
         }
 
         async function processAndUploadVideos(subjectId) {
-            // Gunakan global timestamp yang diset di awal eksperimen agar nama file cocok dengan DB
-            const timestamp = globalExperimentTimestamp.replace(/[:.]/g, '-');
+            // Gunakan global video ID yang diset di awal eksperimen agar nama file 100% cocok dengan DB
+            const timestamp = globalVideoRecordId;
             const uploadIndicator = document.getElementById('upload-status');
             uploadIndicator.classList.remove('hidden');
             uploadIndicator.classList.add('flex');
@@ -708,12 +729,11 @@
             
             addLog("🛑 EKSPERIMEN DIHENTIKAN PAKSA! Menyimpan file...", 'error');
             
-            // Proses Upload Video
+            // Proses Upload Video & Simpan Log (Tanpa download CSV otomatis)
             const subjectId = document.getElementById('subject-id').value.trim() || "Unknown";
             const hand = document.getElementById('hand-selection').value;
             await processAndUploadVideos(subjectId);
             await saveAllDataToDB(subjectId, hand);
-            // downloadCSV(subjectId); // DIMATIKAN: Agar tidak otomatis download CSV
         });
 
         // START EXPERIMENT BUTTON
@@ -735,6 +755,14 @@
                 return;
             }
 
+            // Persiapan Queue Sesi Berdasarkan Mode
+            const expMode = document.getElementById('exp-mode-selection').value;
+            if (expMode === 'ALL') {
+                SESSION_QUEUE = MASTER_SESSION_QUEUE.slice();
+            } else {
+                SESSION_QUEUE = MASTER_SESSION_QUEUE.filter(s => s.mode === expMode);
+            }
+
             // Persiapan UI
             forceStop = false;
             btnStartExp.disabled = true;
@@ -743,6 +771,7 @@
             
             // Catat waktu global persis saat eksperimen dimulai untuk nama file video & DB
             globalExperimentTimestamp = new Date().toISOString(); 
+            globalVideoRecordId = globalExperimentTimestamp.replace(/[:.]/g, '-');
             
             // 1. MULAI WAKTU GLOBAL & RECORDING
             startGlobalTimer();
@@ -807,8 +836,9 @@
                     sessionLogs.push({
                         trial: trialNum,
                         instruction: instructionType,
-                        global_timestamp_ms: actionStartTimeMs,
-                        global_timestamp_str: actionTimeStr
+                        global_timestamp_ms: actionStartTimeMs, // Format numerik
+                        global_timestamp_str: actionTimeStr,    // Format text relatif
+                        start_time: new Date().toISOString()    // Standard timestamp real
                     });
 
                     await wait(TIMING.action);
@@ -837,7 +867,7 @@
                 const sessionEndRelative = formatTimerMs(Date.now() - globalStartTimeMs);
                 experimentData.push({ sessionDef: session, startTime: sessionStartRelative, endTime: sessionEndRelative, logs: sessionLogs });
 
-                // Transisi antar sesi (Menunggu Peneliti Memencet Tombol Lanjut)
+                // Transisi antar sesi (Menunggu Peneliti Memencet Tombol Lanjut, TANPA AUTO COUNTDOWN)
                 if (sIdx < SESSION_QUEUE.length - 1) {
                     setPhase('standby');
                     expWindow.document.getElementById('standby').innerHTML = `
@@ -852,7 +882,7 @@
                     btnStartExp.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
                     btnStartExp.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
                     
-                    addLog(`Menunggu peneliti memulai sesi ${SESSION_QUEUE[sIdx+1].label}...`, 'warning');
+                    addLog(`Menunggu peneliti menekan tombol Lanjut untuk sesi ${SESSION_QUEUE[sIdx+1].label}...`, 'warning');
                     
                     // Jeda proses hingga Peneliti menekan tombol
                     isWaitingForNextSession = true;
@@ -867,17 +897,11 @@
                     btnStartExp.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
                     btnStartExp.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
 
-                    // Beri hitungan mundur kecil 3 detik agar partisipan bersiap kembali
+                    // Lanjut langsung ke instruksi sesi berikutnya, hanya jeda sedetik sebagai tanda.
                     expWindow.document.getElementById('standby').innerHTML = `
-                        <h1 class="text-4xl text-blue-400 mb-4">Bersiap...</h1>
-                        <p class="text-xl text-slate-400">Sesi ${SESSION_QUEUE[sIdx+1].label} akan dimulai</p>
-                        <p class="text-5xl text-white font-bold mt-8" id="jeda-cnt">3</p>
+                        <h1 class="text-4xl text-blue-400 mb-4">Mempersiapkan Sesi Berikutnya...</h1>
                     `;
-                    for(let i=3; i>0; i--) {
-                        if(forceStop) break;
-                        expWindow.document.getElementById('jeda-cnt').innerText = i;
-                        await wait(1000);
-                    }
+                    await wait(1500);
                 }
             }
 
@@ -891,36 +915,12 @@
                 
                 addLog("🎉 SELURUH RANGKAIAN EKSPERIMEN SELESAI", 'success');
                 
-                // Upload & Download
+                // Upload & Database Insert (Tanpa auto download)
                 const hand = document.getElementById('hand-selection').value;
                 await processAndUploadVideos(subjectId);
                 await saveAllDataToDB(subjectId, hand);
-                // downloadCSV(subjectId); // DIMATIKAN: Agar tidak otomatis download CSV
             }
         });
-
-        // DOWNLOAD CSV LOG
-        function downloadCSV(subjectId) {
-            if (experimentData.length === 0) return;
-            
-            const hand = document.getElementById('hand-selection').value;
-            let csv = "Subject,Hand,Session,Mode,Trial,Instruction,GlobalTimestamp_ms,GlobalTimestamp_String\n";
-            
-            experimentData.forEach(sessionData => {
-                sessionData.logs.forEach(log => {
-                    csv += `"${subjectId}","${hand}","${sessionData.sessionDef.label}","${sessionData.sessionDef.mode}",${log.trial},"${log.instruction}",${log.global_timestamp_ms},"${log.global_timestamp_str}"\n`;
-                });
-            });
-
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Log_NeuroLab_${subjectId}_${new Date().toISOString().slice(0,10)}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-            addLog("📂 File CSV log penanda waktu berhasil diunduh.", 'success');
-        }
 
         // ==================== DATABASE & HISTORY UI ====================
         
@@ -936,7 +936,8 @@
                         mode: data.sessionDef.mode,
                         session_start_relative: data.startTime,
                         session_end_relative: data.endTime,
-                        session_start_timestamp: globalExperimentTimestamp, // Gunakan timestamp global yang sama dengan video
+                        session_start_timestamp: globalExperimentTimestamp, 
+                        video_record_id: globalVideoRecordId, // ID spesifik teks untuk URL video
                         trials_data: data.logs 
                     };
 
@@ -997,7 +998,7 @@
                     
                     tr.innerHTML = `
                         <td class="p-4 text-sm">${date}</td>
-                        <td class="p-4 font-bold text-white">${row.subject_id}</td>
+                        <td class="p-4 font-bold text-white">${escapeHtml(row.subject_id)}</td>
                         <td class="p-4 text-slate-300">${row.session_type}</td>
                         <td class="p-4"><span class="px-2 py-1 rounded text-xs border font-bold ${badgeClass}">${row.mode}</span></td>
                         <td class="p-4 text-slate-300">${row.hand}</td>
@@ -1014,7 +1015,7 @@
             }
         }
 
-        // Lihat Rincian Data (Modal)
+        // Lihat Rincian Data (Modal) - DIPERBAIKI dengan signed URL
         window.viewSessionDetail = async function(id) {
             try {
                 const { data, error } = await _supabase
@@ -1025,12 +1026,54 @@
                 
                 if (error) throw error;
                 
-                // Bentuk URL Video berdasarkan timestamp start_session
-                const fileTimestamp = new Date(data.session_start_timestamp).toISOString().replace(/[:.]/g, '-');
-                const safeId = encodeURIComponent(data.subject_id);
-                const faceUrl = `${SUPABASE_URL}/storage/v1/object/public/video/${safeId}_${fileTimestamp}_FACE.webm`;
-                const bodyUrl = `${SUPABASE_URL}/storage/v1/object/public/video/${safeId}_${fileTimestamp}_BODY.webm`;
-                const screenUrl = `${SUPABASE_URL}/storage/v1/object/public/video/${safeId}_${fileTimestamp}_SCREEN.webm`;
+                // Ambil ID video unik langsung dari database (Teks Murni)
+                let fileTimestamp = data.video_record_id;
+                
+                // Fallback (Cadangan) jika membuka riwayat data percobaan yang lama (sebelum ada kolom ini)
+                if (!fileTimestamp && data.session_start_timestamp) {
+                    fileTimestamp = new Date(data.session_start_timestamp + 'Z').toISOString().replace(/[:.]/g, '-');
+                }
+
+                const subjectIdRaw = data.subject_id;
+                const baseFilename = `${subjectIdRaw}_${fileTimestamp}`;
+                const videoTypes = ['FACE', 'BODY', 'SCREEN'];
+                
+                // Fungsi untuk mendapatkan signed URL (berlaku 1 jam)
+                const getSignedUrl = async (type) => {
+                    const filename = `${baseFilename}_${type}.webm`;
+                    try {
+                        const { data: signedData, error: signedError } = await _supabase.storage
+                            .from('video')
+                            .createSignedUrl(filename, 3600); // 1 jam
+                        if (signedError || !signedData) {
+                            console.warn(`Gagal buat signed URL untuk ${type}:`, signedError);
+                            return null;
+                        }
+                        return signedData.signedUrl;
+                    } catch (err) {
+                        console.warn(`Error saat membuat signed URL untuk ${type}:`, err);
+                        return null;
+                    }
+                };
+                
+                // Dapatkan semua signed URL secara paralel
+                const [faceUrl, bodyUrl, screenUrl] = await Promise.all([
+                    getSignedUrl('FACE'),
+                    getSignedUrl('BODY'),
+                    getSignedUrl('SCREEN')
+                ]);
+                
+                // Buat HTML untuk bagian tautan video (dengan fallback jika tidak tersedia)
+                const videoLinksHtml = `
+                    <div class="flex gap-4 flex-wrap">
+                        ${faceUrl ? `<a href="${faceUrl}" target="_blank" class="bg-blue-900 hover:bg-blue-800 text-blue-300 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 border border-blue-700">📹 Buka Video Wajah</a>` : 
+                                     `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Wajah tidak tersedia</span>`}
+                        ${bodyUrl ? `<a href="${bodyUrl}" target="_blank" class="bg-green-900 hover:bg-green-800 text-green-300 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 border border-green-700">📹 Buka Video Badan</a>` : 
+                                     `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Badan tidak tersedia</span>`}
+                        ${screenUrl ? `<a href="${screenUrl}" target="_blank" class="bg-purple-900 hover:bg-purple-800 text-purple-300 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 border border-purple-700">📹 Buka Video Layar/Alat</a>` : 
+                                     `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Layar tidak tersedia</span>`}
+                    </div>
+                `;
 
                 document.getElementById('modal-session-info').innerHTML = `
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Partisipan</p><p class="font-bold text-white text-lg">${escapeHtml(data.subject_id)}</p></div>
@@ -1042,11 +1085,7 @@
                     
                     <div class="col-span-2 md:col-span-3 mt-4 pt-4 border-t border-slate-700">
                         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Tautan Rekaman Video (Tersinkron)</p>
-                        <div class="flex gap-4">
-                            <a href="${faceUrl}" target="_blank" class="bg-blue-900 hover:bg-blue-800 text-blue-300 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 border border-blue-700">📹 Buka Video Wajah</a>
-                            <a href="${bodyUrl}" target="_blank" class="bg-green-900 hover:bg-green-800 text-green-300 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 border border-green-700">📹 Buka Video Badan</a>
-                            <a href="${screenUrl}" target="_blank" class="bg-purple-900 hover:bg-purple-800 text-purple-300 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 border border-purple-700">📹 Buka Video Layar</a>
-                        </div>
+                        ${videoLinksHtml}
                     </div>
                 `;
                 
@@ -1087,7 +1126,7 @@
             }
         };
 
-        // Unduh Semua Data Database
+        // Unduh Semua Data Database (Manual by Button)
         document.getElementById('btn-download-all').addEventListener('click', async () => {
             try {
                 const { data, error } = await _supabase.from('experiment_sessions').select('*');
@@ -1097,11 +1136,11 @@
                     return;
                 }
                 
-                let csvRows = ["SubjectID,Hand,Session,Mode,Trial,Instruction,GlobalTimestamp_ms,GlobalTimestamp_String"];
+                let csvRows = ["SubjectID,Hand,Session,Mode,Trial,Instruction,GlobalTimestamp_String,RealTimestamp"];
                 data.forEach(session => {
                     const trials = session.trials_data || [];
                     trials.forEach(trial => {
-                        csvRows.push(`"${session.subject_id}","${session.hand}","${session.session_type}","${session.mode}",${trial.trial},"${trial.instruction}",${trial.global_timestamp_ms},"${trial.global_timestamp_str}"`);
+                        csvRows.push(`"${session.subject_id}","${session.hand}","${session.session_type}","${session.mode}",${trial.trial},"${trial.instruction}","${trial.global_timestamp_str}","${trial.start_time || ''}"`);
                     });
                 });
                 
