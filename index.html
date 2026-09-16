@@ -21,54 +21,28 @@
             border: 1px solid #334155;
             aspect-ratio: 16/9;
         }
-        video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+        video { width: 100%; height: 100%; object-fit: cover; }
         .cam-label {
-            position: absolute;
-            top: 0.5rem;
-            left: 0.5rem;
-            background: rgba(0,0,0,0.8);
-            padding: 0.2rem 0.5rem;
-            border-radius: 0.25rem;
-            font-size: 0.75rem;
-            font-weight: bold;
-            z-index: 10;
+            position: absolute; top: 0.5rem; left: 0.5rem;
+            background: rgba(0,0,0,0.8); padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem; font-size: 0.75rem; font-weight: bold; z-index: 10;
         }
         .rec-indicator {
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            background: rgba(220, 38, 38, 0.9);
-            color: white;
-            padding: 0.2rem 0.5rem;
-            border-radius: 0.25rem;
-            font-size: 0.75rem;
-            font-weight: bold;
-            z-index: 10;
-            display: none;
-            animation: pulse-rec 1.5s infinite;
+            position: absolute; top: 0.5rem; right: 0.5rem;
+            background: rgba(220, 38, 38, 0.9); color: white;
+            padding: 0.2rem 0.5rem; border-radius: 0.25rem;
+            font-size: 0.75rem; font-weight: bold; z-index: 10;
+            display: none; animation: pulse-rec 1.5s infinite;
         }
         @keyframes pulse-rec {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
+            0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; }
         }
         .log-container {
-            height: 250px;
-            overflow-y: auto;
-            font-family: monospace;
-            background: #1e293b;
-            padding: 1rem;
-            border-radius: 0.5rem;
+            height: 250px; overflow-y: auto; font-family: monospace;
+            background: #1e293b; padding: 1rem; border-radius: 0.5rem;
             border: 1px solid #334155;
         }
-        .timer-glow {
-            text-shadow: 0 0 15px rgba(56, 189, 248, 0.6);
-        }
-        /* Custom scrollbar */
+        .timer-glow { text-shadow: 0 0 15px rgba(56, 189, 248, 0.6); }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
@@ -102,11 +76,11 @@
 
     <main id="main-view" class="flex-1 flex overflow-hidden">
         
-        <aside class="w-[380px] bg-slate-800 border-r border-slate-700 p-5 flex flex-col gap-4 overflow-y-auto">
+        <aside class="w-[400px] bg-slate-800 border-r border-slate-700 p-5 flex flex-col gap-4 overflow-y-auto">
             
-            <!-- Setup 1: Partisipan -->
+            <!-- Setup 1: Partisipan & Mode -->
             <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 shadow-inner">
-                <h2 class="text-sm font-bold mb-3 text-emerald-400">1. Setup Partisipan</h2>
+                <h2 class="text-sm font-bold mb-3 text-emerald-400">1. Setup Partisipan & Mode</h2>
                 <div class="grid grid-cols-2 gap-3">
                     <div class="col-span-2">
                         <label class="block text-xs text-slate-400 mb-1">ID Partisipan</label>
@@ -120,13 +94,30 @@
                         </select>
                     </div>
                     <div class="col-span-2">
-                        <label class="block text-xs text-slate-400 mb-1">Mode Eksperimen</label>
+                        <label class="block text-xs text-slate-400 mb-1">Mode Trial (Jumlah Trial)</label>
+                        <select id="trial-mode-selection" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white">
+                            <option value="1">Mode 1 — ME: 10 trial | MI: 25 trial</option>
+                            <option value="2">Mode 2 — ME: 15 trial | MI: 30 trial</option>
+                        </select>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-slate-400 mb-1">Mode Gerakan (Jumlah Gerakan)</label>
+                        <select id="movement-mode-selection" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white">
+                            <option value="5">5 Gerakan (Lengkap)</option>
+                            <option value="3">3 Gerakan (Hand, Wrist, Elbow UD)</option>
+                        </select>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-slate-400 mb-1">Filter Sesi</label>
                         <select id="exp-mode-selection" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white">
                             <option value="ALL">Keduanya (ME & MI Lengkap)</option>
                             <option value="ME">Hanya ME (Motor Execution)</option>
                             <option value="MI">Hanya MI (Motor Imagery)</option>
                         </select>
                     </div>
+                </div>
+                <div id="mode-preview" class="mt-3 text-[10px] text-slate-400 bg-slate-800 rounded p-2 border border-slate-700 leading-relaxed">
+                    <span class="text-slate-300 font-bold">Preview:</span> <span id="mode-preview-text">-</span>
                 </div>
             </div>
 
@@ -197,26 +188,22 @@
             </div>
             
             <div class="grid grid-cols-2 gap-4 flex-1">
-                <!-- Kam Muka -->
                 <div class="video-container shadow-lg">
                     <div class="cam-label text-blue-300">📹 CAM 1: WAJAH</div>
                     <div class="rec-indicator rec-status">🔴 REC</div>
                     <video id="vid-face" autoplay muted playsinline></video>
                 </div>
-                <!-- Kam Badan -->
                 <div class="video-container shadow-lg">
                     <div class="cam-label text-green-300">📹 CAM 2: BADAN</div>
                     <div class="rec-indicator rec-status">🔴 REC</div>
                     <video id="vid-body" autoplay muted playsinline></video>
                 </div>
-                <!-- Screen Share (Eksperimen / Software EEG) -->
                 <div class="video-container col-span-2 shadow-lg h-[40vh]">
                     <div class="cam-label text-purple-300">📹 CAM 3: LAYAR / SOFTWARE EEG</div>
                     <div class="rec-indicator rec-status">🔴 REC</div>
                     <video id="vid-screen" autoplay muted playsinline></video>
                 </div>
                 
-                <!-- Info Status Session -->
                 <div class="col-span-2 bg-slate-900 border border-slate-700 rounded-lg p-4 flex justify-around items-center text-center shadow-lg">
                     <div>
                         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Sesi Saat Ini</h3>
@@ -236,9 +223,9 @@
 
     </main>
 
-    <!-- AREA RIWAYAT DATA (Awalnya Sembunyi) -->
+    <!-- AREA RIWAYAT DATA -->
     <main id="data-view" class="hidden flex-1 flex-col overflow-y-auto bg-slate-900 p-6">
-        <div class="max-w-6xl mx-auto w-full">
+        <div class="max-w-7xl mx-auto w-full">
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <h2 class="text-2xl font-bold text-blue-400">Manajemen Data Eksperimen</h2>
@@ -259,17 +246,19 @@
                     <table class="w-full text-left text-sm text-slate-300">
                         <thead class="bg-slate-950 text-slate-300 uppercase sticky top-0 z-10 border-b border-slate-700 text-xs">
                             <tr>
-                                <th class="p-4">Tanggal</th>
-                                <th class="p-4">Partisipan</th>
-                                <th class="p-4">Sesi</th>
-                                <th class="p-4">Mode</th>
-                                <th class="p-4">Tangan</th>
-                                <th class="p-4 text-center">Trial</th>
-                                <th class="p-4 text-right">Aksi</th>
+                                <th class="p-3">Tanggal</th>
+                                <th class="p-3">Partisipan</th>
+                                <th class="p-3">Sesi</th>
+                                <th class="p-3">Mode</th>
+                                <th class="p-3">Trial Mode</th>
+                                <th class="p-3">Movement Mode</th>
+                                <th class="p-3">Tangan</th>
+                                <th class="p-3 text-center">Trial</th>
+                                <th class="p-3 text-right">Aksi</th>
                             </tr>
                         </thead>
                         <tbody id="data-table-body" class="divide-y divide-slate-700">
-                            <tr><td colspan="7" class="p-8 text-center text-slate-500">Memuat data...</td></tr>
+                            <tr><td colspan="9" class="p-8 text-center text-slate-500">Memuat data...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -279,7 +268,7 @@
 
     <!-- MODAL DETAIL -->
     <div id="detail-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-        <div class="bg-slate-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-600">
+        <div class="bg-slate-800 rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-slate-600">
             <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-900 rounded-t-lg">
                 <h3 class="text-xl font-bold text-blue-400">Rincian Trial Sesi</h3>
                 <button id="close-modal-btn" class="text-slate-400 hover:text-white text-3xl transition">&times;</button>
@@ -315,56 +304,98 @@
         let globalTimerInterval = null;
         let forceStop = false;
         let experimentData = []; 
-        let globalExperimentTimestamp = null; // Sinkronisasi nama file video & DB
-        let globalVideoRecordId = null; // Format string aman penyambung URL Video
-        let isWaitingForNextSession = false; // Penanda jeda antar sesi
-        let resolveNextSession = null; // Fungsi pembuka jeda
+        let globalExperimentTimestamp = null;
+        let globalVideoRecordId = null;
+        let isWaitingForNextSession = false;
+        let resolveNextSession = null;
 
-        // State Media Streams & Recorders
+        // Info mode yang sedang aktif (untuk DB)
+        let currentTrialMode = null;
+        let currentMovementMode = null;
+        let currentMovementList = [];
+        let currentTrialModeLabel = "";
+        let currentMovementModeLabel = "";
+
         let streams = { face: null, body: null, screen: null };
         let recorders = { face: null, body: null, screen: null };
         let recordedChunks = { face: [], body: [], screen: [] };
 
-        // Definisi Sesi (Bisa disesuaikan, total 70 trials)
-        const MASTER_SESSION_QUEUE = [
-            { name: "ME_Latihan", mode: "ME", trialsCount: 5, label: "ME Latihan" },
-            { name: "ME_Utama", mode: "ME", trialsCount: 20, label: "ME Utama" },
-            { name: "MI_Latihan", mode: "MI", trialsCount: 5, label: "MI Latihan" },
-            { name: "MI_Utama", mode: "MI", trialsCount: 40, label: "MI Utama" }
-        ];
-        let SESSION_QUEUE = [];
+        // ==================== DEFINISI GERAKAN ====================
+        const ASSETS_BASE = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets";
+
+        const MOVEMENTS = {
+            "Opening Hand": {
+                img: `${ASSETS_BASE}/hand_oc.jpeg`,
+                shortLabel: "OPENING HAND",
+                displayName: "Opening Hand",
+                colorClass: "text-emerald-400",
+                bgBadge: "bg-emerald-900/50 text-emerald-300 border-emerald-800"
+            },
+            "Wrist Flexion-Extension": {
+                img: `${ASSETS_BASE}/wrist_fe.jpeg`,
+                shortLabel: "WRIST FLEX-EXT",
+                displayName: "Wrist Flexion-Extension",
+                colorClass: "text-blue-400",
+                bgBadge: "bg-blue-900/50 text-blue-300 border-blue-800"
+            },
+            "Elbow Up-Down": {
+                img: `${ASSETS_BASE}/elbow_ud.jpeg`,
+                shortLabel: "ELBOW UP-DOWN",
+                displayName: "Elbow Up-Down",
+                colorClass: "text-purple-400",
+                bgBadge: "bg-purple-900/50 text-purple-300 border-purple-800"
+            },
+            "Elbow Front Extension": {
+                img: `${ASSETS_BASE}/elbow_f.jpeg`,
+                shortLabel: "ELBOW FRONT EXT",
+                displayName: "Elbow Front Extension",
+                colorClass: "text-orange-400",
+                bgBadge: "bg-orange-900/50 text-orange-300 border-orange-800"
+            },
+            "Elbow Pronation": {
+                img: `${ASSETS_BASE}/elbow_p.jpeg`,
+                shortLabel: "ELBOW PRONATION",
+                displayName: "Elbow Pronation",
+                colorClass: "text-pink-400",
+                bgBadge: "bg-pink-900/50 text-pink-300 border-pink-800"
+            }
+        };
+
+        const MOVEMENT_SET_5 = ["Opening Hand", "Wrist Flexion-Extension", "Elbow Up-Down", "Elbow Front Extension", "Elbow Pronation"];
+        const MOVEMENT_SET_3 = ["Opening Hand", "Wrist Flexion-Extension", "Elbow Up-Down"];
+
+        // Konfigurasi jumlah trial per mode
+        const TRIAL_MODES = {
+            "1": { ME: 10, MI: 25, label: "Mode 1 (ME:10 | MI:25)" },
+            "2": { ME: 15, MI: 30, label: "Mode 2 (ME:15 | MI:30)" }
+        };
+        const PRACTICE_TRIALS = 5;
+
+        function getMovements(mode) {
+            return mode === "3" ? MOVEMENT_SET_3.slice() : MOVEMENT_SET_5.slice();
+        }
+
+        function getMovementModeLabel(mode) {
+            return mode === "3" ? "3 Gerakan (Hand, Wrist, Elbow UD)" : "5 Gerakan (Lengkap)";
+        }
 
         // Konfigurasi Timing (ms)
         const TIMING = { fixation: 2000, instruction: 2000, action: 4000, rest: 5000 };
-
-        // Aset URL
-        const IMG_EXT = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(7).png";
-        const IMG_FLEX = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets/Untitled%20design%20(8).png";
 
         // DOM Elements
         const elLog = document.getElementById('event-log');
         const elTimer = document.getElementById('global-timer');
         const btnStartExp = document.getElementById('btn-start-exp');
         const btnEmergency = document.getElementById('btn-emergency-stop');
-        
-        // Elemen Tambahan UI Riwayat Data
         const btnViewHistory = document.getElementById('btn-view-history');
         const mainView = document.getElementById('main-view');
         const dataView = document.getElementById('data-view');
 
         // ==================== LOGGING & UTILS ====================
-        
-        // Fungsi Escape HTML untuk keamanan
         function escapeHtml(str) {
             if (!str) return '';
             return String(str).replace(/[&<>'"]/g, 
-                tag => ({
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    "'": '&#39;',
-                    '"': '&quot;'
-                }[tag])
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag])
             );
         }
 
@@ -393,19 +424,79 @@
             return `${h}:${m}:${s}.${mil}`;
         }
 
-        function generateTrials(count) {
+        /**
+         * Generate trials dengan distribusi seimbang antar gerakan.
+         * - Jika count <= n: pilih `count` gerakan acak.
+         * - Jika count > n: distribusikan secara merata (remainder dibagi ke gerakan acak).
+         * - Seluruh sequence di-shuffle di akhir.
+         */
+        function generateTrials(count, movements) {
+            const n = movements.length;
             let seq = [];
-            let half = Math.floor(count / 2);
-            for (let i = 0; i < half; i++) seq.push("Extension");
-            for (let i = 0; i < half; i++) seq.push("Flexion");
-            if (count % 2 !== 0) seq.push(Math.random() > 0.5 ? "Extension" : "Flexion");
-            // Shuffle
+
+            if (count <= n) {
+                const shuffled = [...movements].sort(() => Math.random() - 0.5);
+                return shuffled.slice(0, count);
+            }
+
+            const base = Math.floor(count / n);
+            const remainder = count % n;
+
+            // Shuffle dulu supaya gerakan mana yang dapat ekstra bersifat acak
+            const shuffledMovements = [...movements].sort(() => Math.random() - 0.5);
+
+            shuffledMovements.forEach((m, idx) => {
+                const c = base + (idx < remainder ? 1 : 0);
+                for (let i = 0; i < c; i++) seq.push(m);
+            });
+
+            // Shuffle final sequence
             for (let i = seq.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [seq[i], seq[j]] = [seq[j], seq[i]];
             }
             return seq;
         }
+
+        /**
+         * Build session queue berdasarkan mode trial yang dipilih.
+         */
+        function buildSessionQueue(trialMode, expModeFilter) {
+            const counts = TRIAL_MODES[trialMode];
+            if (!counts) return [];
+
+            const allSessions = [
+                { name: "ME_Latihan", mode: "ME", trialsCount: PRACTICE_TRIALS, label: "ME Latihan" },
+                { name: "ME_Utama",   mode: "ME", trialsCount: Math.max(0, counts.ME - PRACTICE_TRIALS), label: "ME Utama" },
+                { name: "MI_Latihan", mode: "MI", trialsCount: PRACTICE_TRIALS, label: "MI Latihan" },
+                { name: "MI_Utama",   mode: "MI", trialsCount: Math.max(0, counts.MI - PRACTICE_TRIALS), label: "MI Utama" }
+            ];
+
+            if (expModeFilter === "ALL") return allSessions;
+            return allSessions.filter(s => s.mode === expModeFilter && s.trialsCount > 0);
+        }
+
+        // ==================== PREVIEW MODE ====================
+        function updateModePreview() {
+            const trialMode = document.getElementById('trial-mode-selection').value;
+            const movementMode = document.getElementById('movement-mode-selection').value;
+            const filter = document.getElementById('exp-mode-selection').value;
+            const counts = TRIAL_MODES[trialMode];
+            const movements = getMovements(movementMode);
+
+            let summary = "";
+            if (filter === "ALL") {
+                summary = `ME: ${counts.ME} trial (${PRACTICE_TRIALS} latihan + ${counts.ME - PRACTICE_TRIALS} utama) &nbsp;|&nbsp; MI: ${counts.MI} trial (${PRACTICE_TRIALS} latihan + ${counts.MI - PRACTICE_TRIALS} utama)<br>Gerakan: ${movements.join(" → ")}`;
+            } else {
+                const total = counts[filter];
+                summary = `${filter}: ${total} trial (${PRACTICE_TRIALS} latihan + ${total - PRACTICE_TRIALS} utama)<br>Gerakan: ${movements.join(" → ")}`;
+            }
+            document.getElementById('mode-preview-text').innerHTML = summary;
+        }
+
+        ['trial-mode-selection', 'movement-mode-selection', 'exp-mode-selection'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updateModePreview);
+        });
 
         // ==================== WAKTU GLOBAL ====================
         function startGlobalTimer() {
@@ -416,7 +507,7 @@
             globalTimerInterval = setInterval(() => {
                 const now = Date.now();
                 elTimer.innerText = formatTimerMs(now - globalStartTimeMs);
-            }, 43); // ~24fps update
+            }, 43);
         }
 
         function stopGlobalTimer() {
@@ -427,9 +518,8 @@
         // ==================== DETEKSI & PILIH KAMERA ====================
         document.getElementById('btn-detect-cam').addEventListener('click', async () => {
             try {
-                // Minta izin sementara agar label perangkat terbaca
                 const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                tempStream.getTracks().forEach(track => track.stop()); // Langsung matikan
+                tempStream.getTracks().forEach(track => track.stop());
 
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const videoInputs = devices.filter(device => device.kind === 'videoinput');
@@ -463,17 +553,14 @@
 
             if(!faceId) { alert("Pilih Kamera Wajah minimal untuk merekam!"); return; }
 
-            // Fungsi helper agar jika gagal dipaksa 480p, akan pakai setelan bebas (fallback)
             const tryGetStream = async (deviceId, camName) => {
                 try {
-                    // Percobaan 1: Maksimalkan kompresi 480p, 15fps (Ukuran ringan)
                     return await navigator.mediaDevices.getUserMedia({ 
                         video: { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } }, 
                         audio: false 
                     });
                 } catch (e) {
                     addLog(`⚠️ ${camName} menolak kompresi. Memuat pengaturan bawaan hardware...`, 'warning');
-                    // Percobaan 2: Jika Overconstrained, lupakan kompresi resolusi dan panggil secara polos
                     return await navigator.mediaDevices.getUserMedia({ 
                         video: { deviceId: { exact: deviceId } }, 
                         audio: false 
@@ -481,7 +568,6 @@
                 }
             };
             
-            // Connect Face Cam (Load 1 per 1 agar jika satu gagal, yang lain tetap diproses)
             try {
                 streams.face = await tryGetStream(faceId, "Kamera Wajah");
                 document.getElementById('vid-face').srcObject = streams.face;
@@ -490,7 +576,6 @@
                 addLog(`❌ Error Kamera Wajah: ${err.message}`, 'error');
             }
 
-            // Connect Body Cam
             if(bodyId) {
                 try {
                     streams.body = await tryGetStream(bodyId, "Kamera Badan");
@@ -501,7 +586,6 @@
                 }
             }
 
-            // Connect EEG / Screen Monitor Cam
             if(eegId) {
                 try {
                     streams.screen = await tryGetStream(eegId, "Kamera ke-3 (Alat/Layar)");
@@ -531,7 +615,6 @@
                 return;
             }
 
-            // Tulis UI Eksperimen ke window baru
             expWindow.document.write(`
                 <!DOCTYPE html>
                 <html lang="id">
@@ -541,10 +624,8 @@
                     <style>
                         body { background-color: #000; color: white; margin: 0; overflow: hidden; font-family: sans-serif; cursor: none; }
                         .center-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; width: 100%; }
-                        
                         .fixation-cross { font-size: 8rem; font-weight: bold; color: white; text-shadow: 0 0 20px rgba(59,130,246,0.6); animation: pulse 1s infinite alternate;}
                         @keyframes pulse { from { opacity: 0.8; transform: scale(1); } to { opacity: 1; transform: scale(1.05); } }
-                        
                         .go-pulse { animation: goPulse 0.8s ease-in-out infinite; }
                         @keyframes goPulse {
                             0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
@@ -557,18 +638,16 @@
                 </head>
                 <body>
                     <div class="hidden-preload">
-                        <img src="${IMG_EXT}">
-                        <img src="${IMG_FLEX}">
+                        ${Object.values(MOVEMENTS).map(m => `<img src="${m.img}">`).join('')}
                     </div>
 
-                    <!-- Fase Layar -->
                     <div id="standby" class="center-content">
                         <h1 class="text-4xl text-slate-500">Menunggu Controller...</h1>
                     </div>
                     <div id="fixation" class="center-content hidden"><div class="fixation-cross">+</div></div>
                     <div id="instruction" class="center-content hidden">
                         <img id="inst-img" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-slate-700 bg-slate-900 shadow-2xl" src="">
-                        <h2 id="inst-text" class="text-6xl font-bold text-yellow-400 uppercase tracking-widest"></h2>
+                        <h2 id="inst-text" class="text-5xl font-bold text-yellow-400 uppercase tracking-widest"></h2>
                     </div>
                     <div id="action" class="center-content hidden">
                         <div class="w-48 h-48 rounded-full border-8 border-green-500 flex items-center justify-center mx-auto mb-8 bg-green-900/30 go-pulse">
@@ -596,7 +675,6 @@
             
             checkReadyToStart();
 
-            // Handle tutup window
             expWindow.addEventListener('beforeunload', () => {
                 statDisp.className = "w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]";
                 btnStartExp.disabled = true;
@@ -618,7 +696,7 @@
             const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp8') ? 'video/webm; codecs=vp8' : 'video/webm';
             const options = { 
                 mimeType: mimeType,
-                videoBitsPerSecond: 250000 // 250 kbps agar file ringan (berguna jika berjam-jam)
+                videoBitsPerSecond: 250000
             };
 
             ['face', 'body', 'screen'].forEach(type => {
@@ -630,7 +708,7 @@
                                 recordedChunks[type].push(e.data);
                             }
                         };
-                        recorder.start(1000); // Kumpulkan chunk tiap detik
+                        recorder.start(1000);
                         recorders[type] = recorder;
                         addLog(`⏺️ Recording dimulai untuk ${type.toUpperCase()}`);
                     } catch (e) {
@@ -639,7 +717,6 @@
                 }
             });
 
-            // Tampilkan UI indikator recording
             document.querySelectorAll('.rec-status').forEach(el => el.style.display = 'block');
         }
 
@@ -654,7 +731,6 @@
         }
 
         async function processAndUploadVideos(subjectId) {
-            // Gunakan global video ID yang diset di awal eksperimen agar nama file 100% cocok dengan DB
             const timestamp = globalVideoRecordId;
             const uploadIndicator = document.getElementById('upload-status');
             uploadIndicator.classList.remove('hidden');
@@ -670,7 +746,6 @@
                     const filename = `${subjectId}_${timestamp}_${type.toUpperCase()}.webm`;
                     addLog(`📤 Mengunggah ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)...`);
                     
-                    // Supabase Upload
                     const task = _supabase.storage.from('video').upload(filename, blob, {
                         cacheControl: '3600',
                         upsert: false
@@ -717,7 +792,7 @@
             forceStop = true;
             if(currentTimeout) clearTimeout(currentTimeout);
             if(restInterval) clearInterval(restInterval);
-            if(resolveNextSession) resolveNextSession(); // Lepaskan jeda jika distop paksa
+            if(resolveNextSession) resolveNextSession();
             
             stopGlobalTimer();
             stopRecordingStreams();
@@ -729,7 +804,6 @@
             
             addLog("🛑 EKSPERIMEN DIHENTIKAN PAKSA! Menyimpan file...", 'error');
             
-            // Proses Upload Video & Simpan Log (Tanpa download CSV otomatis)
             const subjectId = document.getElementById('subject-id').value.trim() || "Unknown";
             const hand = document.getElementById('hand-selection').value;
             await processAndUploadVideos(subjectId);
@@ -738,7 +812,6 @@
 
         // START EXPERIMENT BUTTON
         btnStartExp.addEventListener('click', async () => {
-            // Jika sedang dalam status jeda menunggu sesi berikutnya, lanjutkan sesi
             if (isWaitingForNextSession) {
                 if(resolveNextSession) resolveNextSession();
                 return;
@@ -755,31 +828,42 @@
                 return;
             }
 
-            // Persiapan Queue Sesi Berdasarkan Mode
+            // ==== Baca mode dari UI ====
             const expMode = document.getElementById('exp-mode-selection').value;
-            if (expMode === 'ALL') {
-                SESSION_QUEUE = MASTER_SESSION_QUEUE.slice();
-            } else {
-                SESSION_QUEUE = MASTER_SESSION_QUEUE.filter(s => s.mode === expMode);
+            const trialMode = document.getElementById('trial-mode-selection').value;
+            const movementMode = document.getElementById('movement-mode-selection').value;
+
+            currentTrialMode = trialMode;
+            currentMovementMode = movementMode;
+            currentMovementList = getMovements(movementMode);
+            currentTrialModeLabel = TRIAL_MODES[trialMode].label;
+            currentMovementModeLabel = getMovementModeLabel(movementMode);
+
+            SESSION_QUEUE = buildSessionQueue(trialMode, expMode);
+
+            if (SESSION_QUEUE.length === 0) {
+                alert("Tidak ada sesi yang sesuai filter. Periksa pilihan mode.");
+                return;
             }
 
-            // Persiapan UI
+            // ==== Persiapan UI ====
             forceStop = false;
             btnStartExp.disabled = true;
             document.getElementById('btn-emergency-stop').classList.remove('hidden');
-            experimentData = []; // reset data
+            experimentData = [];
             
-            // Catat waktu global persis saat eksperimen dimulai untuk nama file video & DB
             globalExperimentTimestamp = new Date().toISOString(); 
             globalVideoRecordId = globalExperimentTimestamp.replace(/[:.]/g, '-');
             
-            // 1. MULAI WAKTU GLOBAL & RECORDING
             startGlobalTimer();
             startRecordingStreams();
 
+            addLog(`📋 Trial Mode: ${currentTrialModeLabel}`, 'info');
+            addLog(`📋 Movement Mode: ${currentMovementModeLabel}`, 'info');
+            addLog(`📋 Gerakan aktif (${currentMovementList.length}): ${currentMovementList.join(", ")}`, 'info');
+
             addLog("Mempersiapkan baseline (5 detik)...");
             
-            // Baseline prep di layar subjek
             setPhase('standby');
             expWindow.document.getElementById('standby').innerHTML = '<h1 class="text-4xl text-slate-500">Mulai dalam <span id="prep-cnt" class="text-white font-bold text-5xl">5</span>...</h1>';
             
@@ -789,14 +873,14 @@
                 await wait(1000);
             }
 
-            // 2. Loop Sesi
+            // ==== Loop Sesi ====
             for (let sIdx = 0; sIdx < SESSION_QUEUE.length; sIdx++) {
                 if(forceStop) return;
                 
                 const session = SESSION_QUEUE[sIdx];
-                const trials = generateTrials(session.trialsCount);
+                const trials = generateTrials(session.trialsCount, currentMovementList);
                 
-                addLog(`▶️ Memulai Sesi: ${session.label}`, 'info');
+                addLog(`▶️ Memulai Sesi: ${session.label} (${session.trialsCount} trial)`, 'info');
                 document.getElementById('status-session-name').innerText = session.label;
                 document.getElementById('status-mode').innerText = session.mode;
                 document.getElementById('status-total').innerText = session.trialsCount;
@@ -808,7 +892,8 @@
                 for (let tIdx = 0; tIdx < trials.length; tIdx++) {
                     if(forceStop) break;
                     
-                    const instructionType = trials[tIdx];
+                    const movementName = trials[tIdx];
+                    const movementInfo = MOVEMENTS[movementName];
                     const trialNum = tIdx + 1;
                     document.getElementById('status-trial').innerText = trialNum;
                     
@@ -818,8 +903,8 @@
                     if(forceStop) break;
 
                     // --- PHASE 2: INSTRUCTION ---
-                    expWindow.document.getElementById('inst-img').src = (instructionType === 'Extension') ? IMG_EXT : IMG_FLEX;
-                    expWindow.document.getElementById('inst-text').innerText = `WRIST ${instructionType.toUpperCase()}`;
+                    expWindow.document.getElementById('inst-img').src = movementInfo.img;
+                    expWindow.document.getElementById('inst-text').innerText = movementInfo.shortLabel;
                     setPhase('instruction');
                     await wait(TIMING.instruction);
                     if(forceStop) break;
@@ -831,14 +916,14 @@
                     expWindow.document.getElementById('action-text').innerText = (session.mode === 'ME') ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN";
                     setPhase('action');
                     
-                    addLog(`Trial ${trialNum}/${session.trialsCount} | ${instructionType} | Action: ${actionTimeStr}`);
+                    addLog(`Trial ${trialNum}/${session.trialsCount} | ${movementInfo.displayName} | Action: ${actionTimeStr}`);
                     
                     sessionLogs.push({
                         trial: trialNum,
-                        instruction: instructionType,
-                        global_timestamp_ms: actionStartTimeMs, // Format numerik
-                        global_timestamp_str: actionTimeStr,    // Format text relatif
-                        start_time: new Date().toISOString()    // Standard timestamp real
+                        instruction: movementName,
+                        global_timestamp_ms: actionStartTimeMs,
+                        global_timestamp_str: actionTimeStr,
+                        start_time: new Date().toISOString()
                     });
 
                     await wait(TIMING.action);
@@ -867,16 +952,15 @@
                 const sessionEndRelative = formatTimerMs(Date.now() - globalStartTimeMs);
                 experimentData.push({ sessionDef: session, startTime: sessionStartRelative, endTime: sessionEndRelative, logs: sessionLogs });
 
-                // Transisi antar sesi (Menunggu Peneliti Memencet Tombol Lanjut, TANPA AUTO COUNTDOWN)
+                // Transisi antar sesi
                 if (sIdx < SESSION_QUEUE.length - 1) {
                     setPhase('standby');
                     expWindow.document.getElementById('standby').innerHTML = `
                         <h1 class="text-4xl text-green-400 mb-4">Sesi ${session.label} Selesai</h1>
                         <p class="text-xl text-slate-400">Menunggu peneliti untuk memulai sesi berikutnya...</p>
-                        <p class="text-lg text-slate-500 mt-8 animate-pulse">Menunggu intruksi...</p>
+                        <p class="text-lg text-slate-500 mt-8 animate-pulse">Menunggu instruksi...</p>
                     `;
                     
-                    // Ubah UI Tombol Mulai menjadi Kuning
                     btnStartExp.disabled = false;
                     btnStartExp.innerText = `▶ LANJUT KE: ${SESSION_QUEUE[sIdx+1].label}`;
                     btnStartExp.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
@@ -884,20 +968,17 @@
                     
                     addLog(`Menunggu peneliti menekan tombol Lanjut untuk sesi ${SESSION_QUEUE[sIdx+1].label}...`, 'warning');
                     
-                    // Jeda proses hingga Peneliti menekan tombol
                     isWaitingForNextSession = true;
                     await new Promise(resolve => { resolveNextSession = resolve; });
                     isWaitingForNextSession = false;
 
                     if(forceStop) break;
 
-                    // Kembalikan UI Tombol ke status Hijau (Berjalan)
                     btnStartExp.disabled = true;
                     btnStartExp.innerText = "▶ EKSPERIMEN SEDANG BERJALAN...";
                     btnStartExp.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
                     btnStartExp.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
 
-                    // Lanjut langsung ke instruksi sesi berikutnya, hanya jeda sedetik sebagai tanda.
                     expWindow.document.getElementById('standby').innerHTML = `
                         <h1 class="text-4xl text-blue-400 mb-4">Mempersiapkan Sesi Berikutnya...</h1>
                     `;
@@ -915,7 +996,6 @@
                 
                 addLog("🎉 SELURUH RANGKAIAN EKSPERIMEN SELESAI", 'success');
                 
-                // Upload & Database Insert (Tanpa auto download)
                 const hand = document.getElementById('hand-selection').value;
                 await processAndUploadVideos(subjectId);
                 await saveAllDataToDB(subjectId, hand);
@@ -923,8 +1003,6 @@
         });
 
         // ==================== DATABASE & HISTORY UI ====================
-        
-        // Simpan data ke Database Supabase
         async function saveAllDataToDB(subjectId, hand) {
             addLog("⏳ Menyimpan log timeline ke Database...", "warning");
             try {
@@ -937,7 +1015,12 @@
                         session_start_relative: data.startTime,
                         session_end_relative: data.endTime,
                         session_start_timestamp: globalExperimentTimestamp, 
-                        video_record_id: globalVideoRecordId, // ID spesifik teks untuk URL video
+                        video_record_id: globalVideoRecordId,
+                        // ==== Kolom BARU ====
+                        trial_mode: currentTrialModeLabel,
+                        movement_mode: currentMovementModeLabel,
+                        movement_count: currentMovementList.length,
+                        movement_list: currentMovementList,
                         trials_data: data.logs 
                     };
 
@@ -956,7 +1039,6 @@
             }
         }
 
-        // Toggle Antarmuka
         btnViewHistory.addEventListener('click', () => {
             mainView.classList.add('hidden');
             dataView.classList.remove('hidden');
@@ -970,10 +1052,9 @@
             mainView.classList.remove('hidden');
         });
 
-        // Ambil Data dari Database
         async function fetchDataHistory() {
             const tbody = document.getElementById('data-table-body');
-            tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">Memuat data dari database...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-500">Memuat data dari database...</td></tr>';
             
             try {
                 const { data, error } = await _supabase
@@ -984,7 +1065,7 @@
                 if (error) throw error;
                 
                 if (!data || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500">Belum ada riwayat eksperimen.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-500">Belum ada riwayat eksperimen.</td></tr>';
                     return;
                 }
                 
@@ -995,15 +1076,19 @@
                     const date = new Date(row.created_at).toLocaleString('id-ID');
                     
                     const badgeClass = row.mode === 'ME' ? 'bg-blue-900/50 text-blue-300 border-blue-800' : 'bg-purple-900/50 text-purple-300 border-purple-800';
+                    const tmText = row.trial_mode || '-';
+                    const mmText = row.movement_mode || '-';
                     
                     tr.innerHTML = `
-                        <td class="p-4 text-sm">${date}</td>
-                        <td class="p-4 font-bold text-white">${escapeHtml(row.subject_id)}</td>
-                        <td class="p-4 text-slate-300">${row.session_type}</td>
-                        <td class="p-4"><span class="px-2 py-1 rounded text-xs border font-bold ${badgeClass}">${row.mode}</span></td>
-                        <td class="p-4 text-slate-300">${row.hand}</td>
-                        <td class="p-4 text-center font-mono">${row.trials_data?.length || 0}</td>
-                        <td class="p-4 text-right">
+                        <td class="p-3 text-xs">${date}</td>
+                        <td class="p-3 font-bold text-white">${escapeHtml(row.subject_id)}</td>
+                        <td class="p-3 text-slate-300">${row.session_type}</td>
+                        <td class="p-3"><span class="px-2 py-1 rounded text-xs border font-bold ${badgeClass}">${row.mode}</span></td>
+                        <td class="p-3 text-xs text-slate-300">${tmText}</td>
+                        <td class="p-3 text-xs text-slate-300">${mmText}</td>
+                        <td class="p-3 text-slate-300">${row.hand}</td>
+                        <td class="p-3 text-center font-mono">${row.trials_data?.length || 0}</td>
+                        <td class="p-3 text-right">
                             <button onclick="window.viewSessionDetail('${row.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-xs font-bold shadow transition mr-2">Detail</button>
                             <button onclick="window.deleteSession('${row.id}')" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs font-bold shadow transition">Hapus</button>
                         </td>
@@ -1011,11 +1096,11 @@
                     tbody.appendChild(tr);
                 });
             } catch (err) {
-                tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-red-400">Error: ${err.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-red-400">Error: ${err.message}</td></tr>`;
             }
         }
 
-        // Lihat Rincian Data (Modal) - DIPERBAIKI dengan signed URL
+        // Lihat Rincian Data (Modal)
         window.viewSessionDetail = async function(id) {
             try {
                 const { data, error } = await _supabase
@@ -1026,44 +1111,35 @@
                 
                 if (error) throw error;
                 
-                // Ambil ID video unik langsung dari database (Teks Murni)
                 let fileTimestamp = data.video_record_id;
-                
-                // Fallback (Cadangan) jika membuka riwayat data percobaan yang lama (sebelum ada kolom ini)
                 if (!fileTimestamp && data.session_start_timestamp) {
                     fileTimestamp = new Date(data.session_start_timestamp + 'Z').toISOString().replace(/[:.]/g, '-');
                 }
 
                 const subjectIdRaw = data.subject_id;
                 const baseFilename = `${subjectIdRaw}_${fileTimestamp}`;
-                const videoTypes = ['FACE', 'BODY', 'SCREEN'];
                 
-                // Fungsi untuk mendapatkan signed URL (berlaku 1 jam)
                 const getSignedUrl = async (type) => {
                     const filename = `${baseFilename}_${type}.webm`;
                     try {
                         const { data: signedData, error: signedError } = await _supabase.storage
                             .from('video')
-                            .createSignedUrl(filename, 3600); // 1 jam
+                            .createSignedUrl(filename, 3600);
                         if (signedError || !signedData) {
-                            console.warn(`Gagal buat signed URL untuk ${type}:`, signedError);
                             return null;
                         }
                         return signedData.signedUrl;
                     } catch (err) {
-                        console.warn(`Error saat membuat signed URL untuk ${type}:`, err);
                         return null;
                     }
                 };
                 
-                // Dapatkan semua signed URL secara paralel
                 const [faceUrl, bodyUrl, screenUrl] = await Promise.all([
                     getSignedUrl('FACE'),
                     getSignedUrl('BODY'),
                     getSignedUrl('SCREEN')
                 ]);
                 
-                // Buat HTML untuk bagian tautan video (dengan fallback jika tidak tersedia)
                 const videoLinksHtml = `
                     <div class="flex gap-4 flex-wrap">
                         ${faceUrl ? `<a href="${faceUrl}" target="_blank" class="bg-blue-900 hover:bg-blue-800 text-blue-300 px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1 border border-blue-700">📹 Buka Video Wajah</a>` : 
@@ -1075,13 +1151,25 @@
                     </div>
                 `;
 
+                const movementListText = Array.isArray(data.movement_list) && data.movement_list.length 
+                    ? data.movement_list.join(", ") 
+                    : "-";
+
                 document.getElementById('modal-session-info').innerHTML = `
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Partisipan</p><p class="font-bold text-white text-lg">${escapeHtml(data.subject_id)}</p></div>
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Tangan</p><p class="font-bold text-emerald-400 text-lg">${data.hand}</p></div>
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Sesi</p><p class="font-bold text-slate-300">${data.session_type}</p></div>
-                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Mode</p><p class="font-bold text-blue-400">${data.mode}</p></div>
-                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Mulai Sesi</p><p class="font-mono text-yellow-400">${data.session_start_relative || '-'}</p></div>
-                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Selesai Sesi</p><p class="font-mono text-yellow-400">${data.session_end_relative || '-'}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Mode ME/MI</p><p class="font-bold text-blue-400">${data.mode}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Trial Mode</p><p class="font-bold text-yellow-400 text-xs">${escapeHtml(data.trial_mode || '-')}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Movement Mode</p><p class="font-bold text-pink-400 text-xs">${escapeHtml(data.movement_mode || '-')}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Jumlah Gerakan</p><p class="font-bold text-cyan-400">${data.movement_count ?? '-'}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Mulai Sesi</p><p class="font-mono text-yellow-400 text-sm">${data.session_start_relative || '-'}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Selesai Sesi</p><p class="font-mono text-yellow-400 text-sm">${data.session_end_relative || '-'}</p></div>
+                    
+                    <div class="col-span-2 md:col-span-3">
+                        <p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Daftar Gerakan</p>
+                        <p class="text-slate-300 text-xs">${escapeHtml(movementListText)}</p>
+                    </div>
                     
                     <div class="col-span-2 md:col-span-3 mt-4 pt-4 border-t border-slate-700">
                         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Tautan Rekaman Video (Tersinkron)</p>
@@ -1098,10 +1186,11 @@
                 } else {
                     trials.forEach(t => {
                         const tr = document.createElement('tr');
-                        const isExt = t.instruction === 'Extension';
+                        const movement = MOVEMENTS[t.instruction];
+                        const colorClass = movement ? movement.colorClass : 'text-slate-300';
                         tr.innerHTML = `
                             <td class="p-3 text-center text-slate-400">${t.trial}</td>
-                            <td class="p-3 ${isExt ? 'text-emerald-400' : 'text-blue-400'} font-bold">${t.instruction}</td>
+                            <td class="p-3 ${colorClass} font-bold">${escapeHtml(t.instruction)}</td>
                             <td class="p-3 text-right font-mono text-cyan-300">${t.global_timestamp_str}</td>
                         `;
                         trialList.appendChild(tr);
@@ -1114,7 +1203,6 @@
             }
         };
 
-        // Hapus Data
         window.deleteSession = async function(id) {
             if (!confirm("⚠️ Peringatan: Hapus log sesi ini? Data tidak dapat dikembalikan.")) return;
             try {
@@ -1126,7 +1214,7 @@
             }
         };
 
-        // Unduh Semua Data Database (Manual by Button)
+        // ==================== CSV EXPORT (DIPERKAYA) ====================
         document.getElementById('btn-download-all').addEventListener('click', async () => {
             try {
                 const { data, error } = await _supabase.from('experiment_sessions').select('*');
@@ -1136,15 +1224,71 @@
                     return;
                 }
                 
-                let csvRows = ["SubjectID,Hand,Session,Mode,Trial,Instruction,GlobalTimestamp_String,RealTimestamp"];
+                // Kolom CSV lengkap dengan mode & movement info
+                const headers = [
+                    "SubjectID", "Hand", "Session", "Mode_ME_MI",
+                    "TrialMode", "MovementMode", "MovementCount", "MovementList",
+                    "Trial", "Instruction", "GlobalTimestamp_String", "RealTimestamp",
+                    "SessionStart_Relative", "SessionEnd_Relative",
+                    "VideoRecordID", "SessionStartTimestamp"
+                ];
+                
+                const escapeCSV = (val) => {
+                    if (val === null || val === undefined) return "";
+                    const s = String(val).replace(/"/g, '""');
+                    return `"${s}"`;
+                };
+                
+                let csvRows = [headers.join(",")];
+                
                 data.forEach(session => {
                     const trials = session.trials_data || [];
-                    trials.forEach(trial => {
-                        csvRows.push(`"${session.subject_id}","${session.hand}","${session.session_type}","${session.mode}",${trial.trial},"${trial.instruction}","${trial.global_timestamp_str}","${trial.start_time || ''}"`);
-                    });
+                    const movementListStr = Array.isArray(session.movement_list) 
+                        ? session.movement_list.join(" | ") 
+                        : "";
+                    
+                    if (trials.length === 0) {
+                        // Tetap ekspor baris sesi meski trial kosong
+                        csvRows.push([
+                            escapeCSV(session.subject_id),
+                            escapeCSV(session.hand),
+                            escapeCSV(session.session_type),
+                            escapeCSV(session.mode),
+                            escapeCSV(session.trial_mode || ""),
+                            escapeCSV(session.movement_mode || ""),
+                            escapeCSV(session.movement_count ?? ""),
+                            escapeCSV(movementListStr),
+                            "", "", "", "",
+                            escapeCSV(session.session_start_relative || ""),
+                            escapeCSV(session.session_end_relative || ""),
+                            escapeCSV(session.video_record_id || ""),
+                            escapeCSV(session.session_start_timestamp || "")
+                        ].join(","));
+                    } else {
+                        trials.forEach(trial => {
+                            csvRows.push([
+                                escapeCSV(session.subject_id),
+                                escapeCSV(session.hand),
+                                escapeCSV(session.session_type),
+                                escapeCSV(session.mode),
+                                escapeCSV(session.trial_mode || ""),
+                                escapeCSV(session.movement_mode || ""),
+                                escapeCSV(session.movement_count ?? ""),
+                                escapeCSV(movementListStr),
+                                escapeCSV(trial.trial),
+                                escapeCSV(trial.instruction),
+                                escapeCSV(trial.global_timestamp_str),
+                                escapeCSV(trial.start_time || ""),
+                                escapeCSV(session.session_start_relative || ""),
+                                escapeCSV(session.session_end_relative || ""),
+                                escapeCSV(session.video_record_id || ""),
+                                escapeCSV(session.session_start_timestamp || "")
+                            ].join(","));
+                        });
+                    }
                 });
                 
-                const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -1163,6 +1307,9 @@
         document.getElementById('detail-modal').addEventListener('click', (e) => {
             if (e.target.id === 'detail-modal') closeModals();
         });
+
+        // Inisialisasi preview mode
+        updateModePreview();
 
     </script>
 </body>
