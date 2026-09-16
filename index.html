@@ -45,7 +45,7 @@
     <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center shadow-lg z-20">
         <div>
             <h1 class="text-xl font-bold text-blue-400">🧠 NeuroLab Controller</h1>
-            <p class="text-xs text-slate-400">Dual-Monitor • 5 Gerakan • Sesi Per-Movement</p>
+            <p class="text-xs text-slate-400">Dual-Monitor • 5 Gerakan • MI → ME</p>
         </div>
         <div class="flex items-center gap-4">
             <div id="upload-status" class="hidden items-center gap-2 text-yellow-400 font-bold bg-yellow-900/30 px-4 py-2 rounded-lg border border-yellow-700">
@@ -87,8 +87,8 @@
                     <div class="col-span-2">
                         <label class="block text-xs text-slate-400 mb-1">Mode Trial (Per Gerakan)</label>
                         <select id="trial-mode-selection" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white">
-                            <option value="1">Mode 1 — ME: 10 | MI: 25 (per gerakan)</option>
-                            <option value="2">Mode 2 — ME: 15 | MI: 30 (per gerakan)</option>
+                            <option value="1">Mode 1 — MI: 25 | ME: 10 (per gerakan)</option>
+                            <option value="2">Mode 2 — MI: 30 | ME: 15 (per gerakan)</option>
                         </select>
                     </div>
                     <div class="col-span-2">
@@ -99,11 +99,11 @@
                         </select>
                     </div>
                     <div class="col-span-2">
-                        <label class="block text-xs text-slate-400 mb-1">Filter Sesi ME/MI</label>
+                        <label class="block text-xs text-slate-400 mb-1">Filter Sesi MI/ME</label>
                         <select id="exp-mode-selection" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white">
-                            <option value="ALL">Keduanya (ME & MI)</option>
-                            <option value="ME">Hanya ME</option>
+                            <option value="ALL">Keduanya (MI & ME)</option>
                             <option value="MI">Hanya MI</option>
+                            <option value="ME">Hanya ME</option>
                         </select>
                     </div>
                 </div>
@@ -345,8 +345,8 @@
         const MOVEMENT_SET_3 = ["Opening Hand", "Wrist Flexion-Extension", "Elbow Up-Down"];
 
         const TRIAL_MODES = {
-            "1": { ME: 10, MI: 25, label: "Mode 1 (ME:10 | MI:25)" },
-            "2": { ME: 15, MI: 30, label: "Mode 2 (ME:15 | MI:30)" }
+            "1": { MI: 25, ME: 10, label: "Mode 1 (MI:25 | ME:10)" },
+            "2": { MI: 30, ME: 15, label: "Mode 2 (MI:30 | ME:15)" }
         };
         const PRACTICE_TRIALS = 5;
 
@@ -401,18 +401,18 @@
 
         /**
          * Generate urutan trial untuk SATU gerakan saja.
-         * Semua trial akan berisi gerakan yang sama (karena dipanggil per gerakan).
+         * Semua trial akan berisi gerakan yang sama.
          */
         function generateTrialsForMovement(count, movementName) {
             const arr = [];
             for (let i = 0; i < count; i++) arr.push(movementName);
-            return arr; // tidak perlu shuffle karena semuanya sama
+            return arr;
         }
 
         /**
          * Build session queue: setiap gerakan punya blok sesi sendiri.
-         * Struktur per gerakan:
-         *   ME_Latihan → ME_Utama → MI_Latihan → MI_Utama
+         * Struktur per gerakan (MI DULU, baru ME):
+         *   MI_Latihan → MI_Utama → ME_Latihan → ME_Utama
          */
         function buildSessionQueue(trialMode, movementMode, expModeFilter) {
             const counts = TRIAL_MODES[trialMode];
@@ -423,28 +423,7 @@
             movements.forEach((movementName, mIdx) => {
                 const mInfo = MOVEMENTS[movementName];
 
-                if (expModeFilter === 'ALL' || expModeFilter === 'ME') {
-                    queue.push({
-                        movement: movementName,
-                        movementInfo: mInfo,
-                        movementIndex: mIdx,
-                        movementTotal: movements.length,
-                        mode: 'ME',
-                        phase: 'Latihan',
-                        trialsCount: PRACTICE_TRIALS,
-                        label: `ME Latihan — ${mInfo.displayName}`
-                    });
-                    queue.push({
-                        movement: movementName,
-                        movementInfo: mInfo,
-                        movementIndex: mIdx,
-                        movementTotal: movements.length,
-                        mode: 'ME',
-                        phase: 'Utama',
-                        trialsCount: Math.max(0, counts.ME - PRACTICE_TRIALS),
-                        label: `ME Utama — ${mInfo.displayName}`
-                    });
-                }
+                // ==== MI DULU ====
                 if (expModeFilter === 'ALL' || expModeFilter === 'MI') {
                     queue.push({
                         movement: movementName,
@@ -465,6 +444,30 @@
                         phase: 'Utama',
                         trialsCount: Math.max(0, counts.MI - PRACTICE_TRIALS),
                         label: `MI Utama — ${mInfo.displayName}`
+                    });
+                }
+
+                // ==== BARU ME ====
+                if (expModeFilter === 'ALL' || expModeFilter === 'ME') {
+                    queue.push({
+                        movement: movementName,
+                        movementInfo: mInfo,
+                        movementIndex: mIdx,
+                        movementTotal: movements.length,
+                        mode: 'ME',
+                        phase: 'Latihan',
+                        trialsCount: PRACTICE_TRIALS,
+                        label: `ME Latihan — ${mInfo.displayName}`
+                    });
+                    queue.push({
+                        movement: movementName,
+                        movementInfo: mInfo,
+                        movementIndex: mIdx,
+                        movementTotal: movements.length,
+                        mode: 'ME',
+                        phase: 'Utama',
+                        trialsCount: Math.max(0, counts.ME - PRACTICE_TRIALS),
+                        label: `ME Utama — ${mInfo.displayName}`
                     });
                 }
             });
@@ -495,9 +498,10 @@
             const trialsPerMov = mePerMov + miPerMov;
             const totalTrials = trialsPerMov * movements.length;
 
-            let text = `Setiap gerakan: <b>${mePerMov} ME + ${miPerMov} MI = ${trialsPerMov} trial</b><br>`;
+            let text = `Setiap gerakan: <b>${miPerMov} MI + ${mePerMov} ME = ${trialsPerMov} trial</b><br>`;
             text += `Total ${movements.length} gerakan: <b>${totalTrials} trial</b><br>`;
-            text += `<span class="text-slate-500">Struktur per gerakan:</span> ME Latihan(${PRACTICE_TRIALS}) → ME Utama(${Math.max(0,mePerMov-PRACTICE_TRIALS)}) → MI Latihan(${PRACTICE_TRIALS}) → MI Utama(${Math.max(0,miPerMov-PRACTICE_TRIALS)})<br>`;
+            text += `<span class="text-slate-500">Struktur per gerakan (MI dulu):</span><br>`;
+            text += `MI Latihan(${PRACTICE_TRIALS}) → MI Utama(${Math.max(0,miPerMov-PRACTICE_TRIALS)}) → ME Latihan(${PRACTICE_TRIALS}) → ME Utama(${Math.max(0,mePerMov-PRACTICE_TRIALS)})<br>`;
             text += `<span class="text-slate-500">Gerakan:</span> ${movements.join(" → ")}`;
             document.getElementById('mode-preview-text').innerHTML = text;
         }
@@ -1140,7 +1144,7 @@
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Gerakan</p><p class="font-bold text-pink-400 text-sm">${escapeHtml(data.session_movement || '-')} (${data.session_movement_index || '?'})</p></div>
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Sesi</p><p class="font-bold text-slate-300">${escapeHtml(data.session_type)}</p></div>
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Fase</p><p class="font-bold text-orange-400">${escapeHtml(data.session_phase || '-')}</p></div>
-                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Mode ME/MI</p><p class="font-bold text-blue-400">${data.mode}</p></div>
+                    <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Mode MI/ME</p><p class="font-bold text-blue-400">${data.mode}</p></div>
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Trial Mode</p><p class="font-bold text-yellow-400 text-xs">${escapeHtml(data.trial_mode || '-')}</p></div>
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Movement Mode</p><p class="font-bold text-pink-400 text-xs">${escapeHtml(data.movement_mode || '-')}</p></div>
                     <div><p class="text-slate-500 text-xs uppercase tracking-wider mb-1">Jumlah Gerakan</p><p class="font-bold text-cyan-400">${data.movement_count ?? '-'}</p></div>
@@ -1201,7 +1205,7 @@
                 
                 const headers = [
                     "SubjectID", "Hand", "SessionMovement", "MovementIndex",
-                    "Session", "SessionPhase", "Mode_ME_MI",
+                    "Session", "SessionPhase", "Mode_MI_ME",
                     "TrialMode", "MovementMode", "MovementCount", "MovementList",
                     "Trial", "Instruction", "GlobalTimestamp_String", "RealTimestamp",
                     "SessionStart_Relative", "SessionEnd_Relative",
