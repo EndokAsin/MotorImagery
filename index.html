@@ -45,7 +45,7 @@
     <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center shadow-lg z-20">
         <div>
             <h1 class="text-xl font-bold text-blue-400">🧠 NeuroLab Controller</h1>
-            <p class="text-xs text-slate-400">Dual-Monitor • 5 Gerakan • ME → MI</p>
+            <p class="text-xs text-slate-400">Dual-Monitor • ME → MI • Jeda Sebelum Utama</p>
         </div>
         <div class="flex items-center gap-4">
             <div id="upload-status" class="hidden items-center gap-2 text-yellow-400 font-bold bg-yellow-900/30 px-4 py-2 rounded-lg border border-yellow-700">
@@ -101,9 +101,9 @@
                     <div class="col-span-2">
                         <label class="block text-xs text-slate-400 mb-1">Filter Sesi MI/ME</label>
                         <select id="exp-mode-selection" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm focus:border-blue-500 outline-none text-white">
-                            <option value="ALL">Keduanya (MI & ME)</option>
-                            <option value="MI">Hanya MI</option>
+                            <option value="ALL">Keduanya (ME & MI)</option>
                             <option value="ME">Hanya ME</option>
+                            <option value="MI">Hanya MI</option>
                         </select>
                     </div>
                 </div>
@@ -209,7 +209,6 @@
         </section>
     </main>
 
-    <!-- RIWAYAT DATA -->
     <main id="data-view" class="hidden flex-1 flex-col overflow-y-auto bg-slate-900 p-6">
         <div class="max-w-7xl mx-auto w-full">
             <div class="flex justify-between items-center mb-6">
@@ -253,7 +252,6 @@
         </div>
     </main>
 
-    <!-- MODAL DETAIL -->
     <div id="detail-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-slate-800 rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-slate-600">
             <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-900 rounded-t-lg">
@@ -362,8 +360,9 @@
             "2": { MI: 30, ME: 15, label: "Mode 2 (MI:30 | ME:15)" }
         };
 
-        // REVISI: Latihan dari 5 → 3
-        const PRACTICE_TRIALS = 3;
+        // ==== JUMLAH LATIHAN DIPERSEDIKIT ====
+        const PRACTICE_TRIALS = 3;   // <- sebelumnya 5, sekarang 3
+        const MAIN_TRIALS_PER_MODE_UNCHANGED = true;  // Penanda bahwa total utama tidak berubah
 
         function getMovements(mode) {
             return mode === "3" ? MOVEMENT_SET_3.slice() : MOVEMENT_SET_5.slice();
@@ -421,12 +420,9 @@
         }
 
         /**
-         * REVISI: Build session queue dengan urutan ME DULU → MI
-         * Setiap gerakan punya struktur:
-         *   ME Latihan(3) → [PAUSE] → ME Utama(N-3) → MI Latihan(3) → [PAUSE] → MI Utama(N-3)
-         *   → [PAUSE antar gerakan] → gerakan berikutnya
-         *
-         * Flag `pauseBefore: true` = ada jeda (tombol Lanjut manual) SEBELUM sesi ini dijalankan.
+         * Build session queue: setiap gerakan punya blok sesi sendiri.
+         * URUTAN BARU: ME Latihan → ME Utama → MI Latihan → MI Utama
+         * Total utama TIDAK berubah (Latihan dikurangi jadi PRACTICE_TRIALS)
          */
         function buildSessionQueue(trialMode, movementMode, expModeFilter) {
             const counts = TRIAL_MODES[trialMode];
@@ -447,7 +443,6 @@
                         mode: 'ME',
                         phase: 'Latihan',
                         trialsCount: PRACTICE_TRIALS,
-                        pauseBefore: false, // sesi pertama gerakan, langsung mulai
                         label: `ME Latihan — ${mInfo.displayName}`
                     });
                     queue.push({
@@ -458,12 +453,11 @@
                         mode: 'ME',
                         phase: 'Utama',
                         trialsCount: Math.max(0, counts.ME - PRACTICE_TRIALS),
-                        pauseBefore: true, // JEDA sebelum ME Utama
                         label: `ME Utama — ${mInfo.displayName}`
                     });
                 }
 
-                // ==== MI KEMUDIAN ====
+                // ==== BARU MI ====
                 if (expModeFilter === 'ALL' || expModeFilter === 'MI') {
                     queue.push({
                         movement: movementName,
@@ -473,7 +467,6 @@
                         mode: 'MI',
                         phase: 'Latihan',
                         trialsCount: PRACTICE_TRIALS,
-                        pauseBefore: false, // langsung setelah ME Utama (auto-transisi)
                         label: `MI Latihan — ${mInfo.displayName}`
                     });
                     queue.push({
@@ -484,7 +477,6 @@
                         mode: 'MI',
                         phase: 'Utama',
                         trialsCount: Math.max(0, counts.MI - PRACTICE_TRIALS),
-                        pauseBefore: true, // JEDA sebelum MI Utama
                         label: `MI Utama — ${mInfo.displayName}`
                     });
                 }
@@ -493,11 +485,23 @@
             return queue.filter(s => s.trialsCount > 0);
         }
 
-        function isLastSessionOfMovement(queue, currentIdx, session) {
-            for (let i = currentIdx + 1; i < queue.length; i++) {
-                if (queue[i].movementIndex === session.movementIndex) return false;
+        /**
+         * Tentukan apakah transisi dari prev → next perlu pause manual.
+         * Return: null (auto) | 'movement-boundary' | 'practice-to-main'
+         */
+        function getPauseReason(prevSession, nextSession) {
+            if (!prevSession || !nextSession) return null;
+            // 1. Batas antar gerakan
+            if (nextSession.movementIndex !== prevSession.movementIndex) {
+                return 'movement-boundary';
             }
-            return true;
+            // 2. Jeda sebelum masuk sesi Utama (setelah Latihan, mode sama)
+            if (nextSession.phase === 'Utama'
+                && prevSession.phase === 'Latihan'
+                && nextSession.mode === prevSession.mode) {
+                return 'practice-to-main';
+            }
+            return null;
         }
 
         // ==================== PREVIEW MODE ====================
@@ -512,13 +516,15 @@
             const miPerMov = (filter === 'ALL' || filter === 'MI') ? counts.MI : 0;
             const trialsPerMov = mePerMov + miPerMov;
             const totalTrials = trialsPerMov * movements.length;
-            const pauseCount = movements.length * 3 - 1; // ME Utama + MI Utama + antar-gerakan (terakhir tidak dihitung)
+
+            const meUtama = Math.max(0, mePerMov - PRACTICE_TRIALS);
+            const miUtama = Math.max(0, miPerMov - PRACTICE_TRIALS);
 
             let text = `Setiap gerakan: <b>${mePerMov} ME + ${miPerMov} MI = ${trialsPerMov} trial</b><br>`;
             text += `Total ${movements.length} gerakan: <b>${totalTrials} trial</b><br>`;
-            text += `<span class="text-slate-500">Struktur per gerakan (ME dulu):</span><br>`;
-            text += `ME Latihan(${PRACTICE_TRIALS}) → <span class="text-yellow-400">⏸️</span> → ME Utama(${Math.max(0,mePerMov-PRACTICE_TRIALS)}) → MI Latihan(${PRACTICE_TRIALS}) → <span class="text-yellow-400">⏸️</span> → MI Utama(${Math.max(0,miPerMov-PRACTICE_TRIALS)})<br>`;
-            text += `<span class="text-yellow-400">⏸️</span> = jeda manual (klik tombol Lanjut kuning)<br>`;
+            text += `<span class="text-slate-500">Urutan per gerakan (ME dulu, jeda sebelum Utama):</span><br>`;
+            text += `ME Latihan(${PRACTICE_TRIALS}) <span class="text-yellow-400">⏸</span> → ME Utama(${meUtama}) → MI Latihan(${PRACTICE_TRIALS}) <span class="text-yellow-400">⏸</span> → MI Utama(${miUtama})<br>`;
+            text += `<span class="text-yellow-400">⏸</span> = jeda manual (tombol Lanjut)<br>`;
             text += `<span class="text-slate-500">Gerakan:</span> ${movements.join(" → ")}`;
             document.getElementById('mode-preview-text').innerHTML = text;
         }
@@ -878,7 +884,6 @@
                 if(resolveNextSession) resolveNextSession();
                 return;
             }
-
             if (isExperimentRunning) return;
 
             const subjectId = document.getElementById('subject-id').value.trim();
@@ -915,7 +920,6 @@
                 addLog(`📋 Trial Mode: ${currentTrialModeLabel}`, 'info');
                 addLog(`📋 Movement Mode: ${currentMovementModeLabel}`, 'info');
                 addLog(`📋 Total Gerakan: ${currentMovementList.length}`, 'info');
-                addLog(`📋 Total Sesi: ${SESSION_QUEUE.length} (dengan jeda sebelum tiap sesi Utama & antar gerakan)`, 'info');
 
                 addLog("Mempersiapkan baseline (5 detik)...");
                 setPhase('standby');
@@ -952,19 +956,16 @@
                         const trialNum = tIdx + 1;
                         document.getElementById('status-trial').innerText = trialNum;
 
-                        // FIXATION
                         setPhase('fixation');
                         await wait(TIMING.fixation);
                         if(forceStop) break;
 
-                        // INSTRUCTION
                         setPopupSrc('inst-img', movementInfo.img);
                         setPopupText('inst-text', movementInfo.shortLabel);
                         setPhase('instruction');
                         await wait(TIMING.instruction);
                         if(forceStop) break;
 
-                        // ACTION
                         const actionStartTimeMs = Date.now() - globalStartTimeMs;
                         const actionTimeStr = formatTimerMs(actionStartTimeMs);
 
@@ -984,7 +985,6 @@
                         await wait(TIMING.action);
                         if(forceStop) break;
 
-                        // REST
                         setPhase('rest');
                         let restCount = TIMING.rest / 1000;
                         setPopupText('rest-timer', restCount);
@@ -1015,48 +1015,42 @@
                     // ============ TRANSISI ============
                     if (sIdx < SESSION_QUEUE.length - 1) {
                         const nextSession = SESSION_QUEUE[sIdx + 1];
-                        const isMovementBoundary = isLastSessionOfMovement(SESSION_QUEUE, sIdx, session);
-                        // REVISI: butuh jeda kalau (a) antar gerakan ATAU (b) nextSession.pauseBefore = true
-                        const needsPause = isMovementBoundary || nextSession.pauseBefore;
+                        const pauseReason = getPauseReason(session, nextSession);
 
-                        if (needsPause) {
-                            // ==== JEDA MANUAL (Tombol Lanjut Kuning) ====
-                            setPhase('standby');
+                        if (pauseReason) {
+                            // ==== PAUSE MANUAL (tombol kuning) ====
+                            let pauseTitle, pauseSubtitle, logMsg, btnLabel;
 
-                            if (isMovementBoundary) {
-                                // Jeda antar-gerakan
-                                setPopupHtml('standby', `
-                                    <h1 class="text-5xl text-green-400 mb-6">✅ ${session.movementInfo.displayName}</h1>
-                                    <h2 class="text-3xl text-white font-bold mb-8">SELESAI</h2>
-                                    <div class="border-t border-slate-700 pt-6 mt-6">
-                                        <p class="text-xl text-slate-400 mb-2">Gerakan berikutnya:</p>
-                                        <p class="text-3xl text-yellow-400 font-bold mb-6">${nextSession.movementInfo.displayName}</p>
-                                        <p class="text-lg text-slate-500 mt-8 animate-pulse">Menunggu instruksi peneliti...</p>
-                                    </div>
-                                `);
-                                addLog(`⏸️ PAUSE antar-gerakan — "${session.movementInfo.displayName}" selesai. Klik tombol Lanjut untuk ke "${nextSession.movementInfo.displayName}"`, 'warning');
-                            } else {
-                                // Jeda sebelum sesi Utama (masih gerakan yang sama)
-                                const sesiBerikutnya = nextSession.mode === 'ME' ? 'ME UTAMA' : 'MI UTAMA';
-                                setPopupHtml('standby', `
-                                    <h1 class="text-4xl text-green-400 mb-4">Latihan Selesai</h1>
-                                    <h2 class="text-2xl text-white font-bold mb-8">${session.movementInfo.displayName}</h2>
-                                    <div class="border-t border-slate-700 pt-6 mt-6">
-                                        <p class="text-xl text-slate-400 mb-2">Sesi berikutnya:</p>
-                                        <p class="text-3xl text-yellow-400 font-bold mb-6">${sesiBerikutnya}</p>
-                                        <p class="text-lg text-slate-500 mt-8 animate-pulse">Pastikan partisipan siap. Menunggu peneliti...</p>
-                                    </div>
-                                `);
-                                addLog(`⏸️ PAUSE sebelum ${sesiBerikutnya} — "${session.movementInfo.displayName}". Klik tombol Lanjut untuk memulai.`, 'warning');
+                            if (pauseReason === 'movement-boundary') {
+                                pauseTitle = `✅ ${session.movementInfo.displayName}`;
+                                pauseSubtitle = `Gerakan berikutnya: ${nextSession.movementInfo.displayName}`;
+                                btnLabel = `▶ LANJUT KE: ${nextSession.movementInfo.displayName}`;
+                                logMsg = `⏸️ PAUSE — Gerakan "${session.movementInfo.displayName}" selesai. Timer tetap jalan. Klik tombol Lanjut untuk ke "${nextSession.movementInfo.displayName}"`;
+                            } else { // practice-to-main
+                                pauseTitle = `✅ ${session.label}`;
+                                pauseSubtitle = `Sesi berikutnya: ${nextSession.label}`;
+                                btnLabel = `▶ LANJUT KE: ${nextSession.label}`;
+                                logMsg = `⏸️ JEDA LATIHAN → UTAMA — "${session.label}" selesai. Klik tombol Lanjut untuk masuk ke "${nextSession.label}"`;
                             }
+
+                            setPhase('standby');
+                            setPopupHtml('standby', `
+                                <h1 class="text-5xl text-green-400 mb-6">${pauseTitle}</h1>
+                                <h2 class="text-3xl text-white font-bold mb-8">SELESAI</h2>
+                                <div class="border-t border-slate-700 pt-6 mt-6">
+                                    <p class="text-xl text-slate-400 mb-2">Sesi berikutnya:</p>
+                                    <p class="text-3xl text-yellow-400 font-bold mb-6">${pauseSubtitle}</p>
+                                    <p class="text-lg text-slate-500 mt-8 animate-pulse">Menunggu instruksi peneliti...</p>
+                                </div>
+                            `);
 
                             isWaitingForNextSession = true;
                             btnStartExp.disabled = false;
-                            btnStartExp.innerText = isMovementBoundary
-                                ? `▶ LANJUT KE: ${nextSession.movementInfo.displayName}`
-                                : `▶ LANJUT KE: ${nextSession.label}`;
+                            btnStartExp.innerText = btnLabel;
                             btnStartExp.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
                             btnStartExp.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
+
+                            addLog(logMsg, 'warning');
 
                             await new Promise(resolve => { resolveNextSession = resolve; });
                             isWaitingForNextSession = false;
@@ -1068,10 +1062,14 @@
                             btnStartExp.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
                             btnStartExp.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
 
-                            // Auto countdown prep 3 detik sebelum sesi berikutnya
+                            // Auto countdown prep 3 detik
+                            const prepTitle = (pauseReason === 'movement-boundary')
+                                ? nextSession.movementInfo.displayName
+                                : nextSession.label;
+
                             setPopupHtml('standby', `
                                 <h1 class="text-4xl text-blue-400 mb-6">Mempersiapkan</h1>
-                                <h2 class="text-3xl text-yellow-400 font-bold mb-8">${isMovementBoundary ? nextSession.movementInfo.displayName : nextSession.label}</h2>
+                                <h2 class="text-3xl text-yellow-400 font-bold mb-8">${prepTitle}</h2>
                                 <p class="text-7xl text-white font-bold mt-8" id="trans-cnt">3</p>
                             `);
                             for (let i = 3; i > 0; i--) {
@@ -1080,7 +1078,7 @@
                                 await wait(1000);
                             }
                         } else {
-                            // ==== AUTO-FLOW (tanpa jeda) ====
+                            // ==== AUTO-TRANSISI (dalam gerakan yang sama, tanpa jeda khusus) ====
                             setPhase('standby');
                             setPopupHtml('standby', `
                                 <h1 class="text-3xl text-green-400 mb-4">Sesi Selesai</h1>
@@ -1391,7 +1389,6 @@
             if (e.target.id === 'detail-modal') closeModals();
         });
 
-        // Init
         updateModePreview();
         checkReadyToStart();
     </script>
