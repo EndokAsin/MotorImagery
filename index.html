@@ -45,7 +45,7 @@
     <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center shadow-lg z-20">
         <div>
             <h1 class="text-xl font-bold text-blue-400">🧠 NeuroLab Controller</h1>
-            <p class="text-xs text-slate-400">Dual-Monitor • ME → MI • Jeda Sebelum Utama</p>
+            <p class="text-xs text-slate-400">Dual-Monitor • ME → MI • Flex-Hold-Ext Cycle</p>
         </div>
         <div class="flex items-center gap-4">
             <div id="upload-status" class="hidden items-center gap-2 text-yellow-400 font-bold bg-yellow-900/30 px-4 py-2 rounded-lg border border-yellow-700">
@@ -264,7 +264,13 @@
                 <div class="overflow-hidden rounded border border-slate-700">
                     <table class="w-full text-left text-sm">
                         <thead class="bg-slate-950 text-slate-400 text-xs uppercase">
-                            <tr><th class="p-3 text-center">No</th><th class="p-3">Instruksi</th><th class="p-3 text-right">Waktu Aksi (Relatif)</th></tr>
+                            <tr>
+                                <th class="p-3 text-center">No</th>
+                                <th class="p-3">Instruksi</th>
+                                <th class="p-3 text-right">Flexion</th>
+                                <th class="p-3 text-right">Hold</th>
+                                <th class="p-3 text-right">Extension</th>
+                            </tr>
                         </thead>
                         <tbody id="modal-trial-list" class="divide-y divide-slate-700 text-slate-300"></tbody>
                     </table>
@@ -316,39 +322,74 @@
         let recorders = { face: null, body: null, screen: null };
         let recordedChunks = { face: [], body: [], screen: [] };
 
-        // ==================== DEFINISI GERAKAN ====================
+        // ==================== ASSET GAMBAR (SUPABASE STORAGE) ====================
         const ASSETS_BASE = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets";
 
+        // Mapping file PNG → makna gerakan
+        const IMG_CLENCH       = `${ASSETS_BASE}/8.png`; // 8 = clenching hand
+        const IMG_OPEN_HAND    = `${ASSETS_BASE}/7.png`; // 7 = open hand
+        const IMG_WRIST_FLEX   = `${ASSETS_BASE}/6.png`; // 6 = wrist flexion
+        const IMG_WRIST_EXT    = `${ASSETS_BASE}/5.png`; // 5 = wrist extension
+        const IMG_ELBOW_EXT    = `${ASSETS_BASE}/4.png`; // 4 = elbow extension
+        const IMG_ELBOW_FLEX   = `${ASSETS_BASE}/3.png`; // 3 = elbow flexion
+        const IMG_ELBOW_PRON   = `${ASSETS_BASE}/2.png`; // 2 = elbow pronation
+        const IMG_ELBOW_SUP    = `${ASSETS_BASE}/1.png`; // 1 = elbow supination
+
+        // ==================== DEFINISI GERAKAN ====================
+        // Setiap gerakan punya 3 fase: flexion → hold → extension
+        // - flexion: posisi awal / kontraksi (gambar utama)
+        // - hold: TAHAN di posisi flexion (gambar sama dengan flexion, teks "TAHAN")
+        // - extension: gerakan balik / relaksasi (gambar berlawanan)
         const MOVEMENTS = {
             "Opening Hand": {
-                img: `${ASSETS_BASE}/hand_oc.jpeg`,
-                shortLabel: "OPENING HAND",
                 displayName: "Opening Hand",
-                colorClass: "text-emerald-400"
+                shortLabel: "OPENING HAND",
+                colorClass: "text-emerald-400",
+                phase: {
+                    flexion:   { img: IMG_CLENCH,    label: "CLENCH HAND" },
+                    hold:      { img: IMG_CLENCH,    label: "TAHAN" },
+                    extension: { img: IMG_OPEN_HAND, label: "OPEN HAND" }
+                }
             },
             "Wrist Flexion-Extension": {
-                img: `${ASSETS_BASE}/wrist_fe.jpeg`,
-                shortLabel: "WRIST FLEX-EXT",
                 displayName: "Wrist Flexion-Extension",
-                colorClass: "text-blue-400"
+                shortLabel: "WRIST FLEX-EXT",
+                colorClass: "text-blue-400",
+                phase: {
+                    flexion:   { img: IMG_WRIST_FLEX, label: "WRIST FLEXION" },
+                    hold:      { img: IMG_WRIST_FLEX, label: "TAHAN" },
+                    extension: { img: IMG_WRIST_EXT,  label: "WRIST EXTENSION" }
+                }
             },
             "Elbow Up-Down": {
-                img: `${ASSETS_BASE}/elbow_ud.jpeg`,
-                shortLabel: "ELBOW UP-DOWN",
                 displayName: "Elbow Up-Down",
-                colorClass: "text-purple-400"
+                shortLabel: "ELBOW UP-DOWN",
+                colorClass: "text-purple-400",
+                phase: {
+                    flexion:   { img: IMG_ELBOW_FLEX, label: "ELBOW FLEXION" },
+                    hold:      { img: IMG_ELBOW_FLEX, label: "TAHAN" },
+                    extension: { img: IMG_ELBOW_EXT,  label: "ELBOW EXTENSION" }
+                }
             },
             "Elbow Front Extension": {
-                img: `${ASSETS_BASE}/elbow_f.jpeg`,
-                shortLabel: "ELBOW FRONT EXT",
                 displayName: "Elbow Front Extension",
-                colorClass: "text-orange-400"
+                shortLabel: "ELBOW FRONT EXT",
+                colorClass: "text-orange-400",
+                phase: {
+                    flexion:   { img: IMG_ELBOW_FLEX, label: "ELBOW FLEXION" },
+                    hold:      { img: IMG_ELBOW_FLEX, label: "TAHAN" },
+                    extension: { img: IMG_ELBOW_EXT,  label: "ELBOW EXTENSION" }
+                }
             },
             "Elbow Pronation": {
-                img: `${ASSETS_BASE}/elbow_p.jpeg`,
-                shortLabel: "ELBOW PRONATION",
                 displayName: "Elbow Pronation",
-                colorClass: "text-pink-400"
+                shortLabel: "ELBOW PRONATION",
+                colorClass: "text-pink-400",
+                phase: {
+                    flexion:   { img: IMG_ELBOW_PRON, label: "PRONATION" },
+                    hold:      { img: IMG_ELBOW_PRON, label: "TAHAN" },
+                    extension: { img: IMG_ELBOW_SUP,  label: "SUPINATION" }
+                }
             }
         };
 
@@ -360,9 +401,7 @@
             "2": { MI: 30, ME: 15, label: "Mode 2 (MI:30 | ME:15)" }
         };
 
-        // ==== JUMLAH LATIHAN DIPERSEDIKIT ====
-        const PRACTICE_TRIALS = 3;   // <- sebelumnya 5, sekarang 3
-        const MAIN_TRIALS_PER_MODE_UNCHANGED = true;  // Penanda bahwa total utama tidak berubah
+        const PRACTICE_TRIALS = 3;
 
         function getMovements(mode) {
             return mode === "3" ? MOVEMENT_SET_3.slice() : MOVEMENT_SET_5.slice();
@@ -372,7 +411,16 @@
             return mode === "3" ? "3 Gerakan (Hand, Wrist, Elbow UD)" : "5 Gerakan (Lengkap)";
         }
 
-        const TIMING = { fixation: 2000, instruction: 2000, action: 4000, rest: 5000 };
+        // ==================== TIMING (ms) ====================
+        // Setiap trial = fixation → instruction → FLEX → HOLD → EXT → rest
+        const TIMING = {
+            fixation: 2000,
+            instruction: 2000,
+            flexion: 2000,     // 2s flexion
+            hold: 2000,        // 2s tahan
+            extension: 2000,   // 2s extension
+            rest: 5000
+        };
 
         const elLog = document.getElementById('event-log');
         const elTimer = document.getElementById('global-timer');
@@ -413,6 +461,10 @@
             return `${h}:${m}:${s}.${mil}`;
         }
 
+        /**
+         * Setiap trial = 1 siklus penuh (flex-hold-ext) dari SATU gerakan.
+         * Tidak ada randomisasi — urutan selalu flexion → hold → extension.
+         */
         function generateTrialsForMovement(count, movementName) {
             const arr = [];
             for (let i = 0; i < count; i++) arr.push(movementName);
@@ -421,8 +473,7 @@
 
         /**
          * Build session queue: setiap gerakan punya blok sesi sendiri.
-         * URUTAN BARU: ME Latihan → ME Utama → MI Latihan → MI Utama
-         * Total utama TIDAK berubah (Latihan dikurangi jadi PRACTICE_TRIALS)
+         * URUTAN: ME Latihan → ME Utama → MI Latihan → MI Utama
          */
         function buildSessionQueue(trialMode, movementMode, expModeFilter) {
             const counts = TRIAL_MODES[trialMode];
@@ -485,17 +536,11 @@
             return queue.filter(s => s.trialsCount > 0);
         }
 
-        /**
-         * Tentukan apakah transisi dari prev → next perlu pause manual.
-         * Return: null (auto) | 'movement-boundary' | 'practice-to-main'
-         */
         function getPauseReason(prevSession, nextSession) {
             if (!prevSession || !nextSession) return null;
-            // 1. Batas antar gerakan
             if (nextSession.movementIndex !== prevSession.movementIndex) {
                 return 'movement-boundary';
             }
-            // 2. Jeda sebelum masuk sesi Utama (setelah Latihan, mode sama)
             if (nextSession.phase === 'Utama'
                 && prevSession.phase === 'Latihan'
                 && nextSession.mode === prevSession.mode) {
@@ -520,11 +565,15 @@
             const meUtama = Math.max(0, mePerMov - PRACTICE_TRIALS);
             const miUtama = Math.max(0, miPerMov - PRACTICE_TRIALS);
 
+            const secPerTrial = (TIMING.fixation + TIMING.instruction + TIMING.flexion + TIMING.hold + TIMING.extension + TIMING.rest) / 1000;
+            const totalSec = totalTrials * secPerTrial;
+            const estMin = (totalSec / 60).toFixed(1);
+
             let text = `Setiap gerakan: <b>${mePerMov} ME + ${miPerMov} MI = ${trialsPerMov} trial</b><br>`;
-            text += `Total ${movements.length} gerakan: <b>${totalTrials} trial</b><br>`;
+            text += `Total ${movements.length} gerakan: <b>${totalTrials} trial</b> ≈ ${estMin} menit<br>`;
             text += `<span class="text-slate-500">Urutan per gerakan (ME dulu, jeda sebelum Utama):</span><br>`;
             text += `ME Latihan(${PRACTICE_TRIALS}) <span class="text-yellow-400">⏸</span> → ME Utama(${meUtama}) → MI Latihan(${PRACTICE_TRIALS}) <span class="text-yellow-400">⏸</span> → MI Utama(${miUtama})<br>`;
-            text += `<span class="text-yellow-400">⏸</span> = jeda manual (tombol Lanjut)<br>`;
+            text += `<span class="text-slate-500">Tiap trial (${secPerTrial}s):</span> Fixation(2) → Instruction(2) → <span class="text-emerald-400">Flex(2)</span> → <span class="text-yellow-400">Hold(2)</span> → <span class="text-blue-400">Ext(2)</span> → Rest(5)<br>`;
             text += `<span class="text-slate-500">Gerakan:</span> ${movements.join(" → ")}`;
             document.getElementById('mode-preview-text').innerHTML = text;
         }
@@ -708,13 +757,22 @@
                             70% { transform: scale(1.05); box-shadow: 0 0 0 30px rgba(74, 222, 128, 0); }
                             100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
                         }
+                        .hold-pulse { animation: holdPulse 0.5s ease-in-out infinite; }
+                        @keyframes holdPulse {
+                            0% { transform: scale(1); }
+                            50% { transform: scale(1.08); }
+                            100% { transform: scale(1); }
+                        }
                         .countdown-number { font-size: 8rem; font-weight: bold; font-family: monospace; }
                         .hidden-preload { display: none; }
+                        .phase-badge { display: inline-block; padding: 0.5rem 1.5rem; border-radius: 9999px; font-weight: bold; font-size: 1.25rem; letter-spacing: 0.1em; margin-bottom: 1rem; }
                     </style>
                 </head>
                 <body>
                     <div class="hidden-preload">
-                        ${Object.values(MOVEMENTS).map(m => `<img src="${m.img}">`).join('')}
+                        ${Object.values(MOVEMENTS).map(m => 
+                            `<img src="${m.phase.flexion.img}"><img src="${m.phase.extension.img}">`
+                        ).join('')}
                     </div>
 
                     <div id="standby" class="center-content">
@@ -725,12 +783,31 @@
                         <img id="inst-img" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-slate-700 bg-slate-900 shadow-2xl" src="">
                         <h2 id="inst-text" class="text-5xl font-bold text-yellow-400 uppercase tracking-widest"></h2>
                     </div>
-                    <div id="action" class="center-content hidden">
-                        <div class="w-48 h-48 rounded-full border-8 border-green-500 flex items-center justify-center mx-auto mb-8 bg-green-900/30 go-pulse">
-                            <span class="text-6xl font-bold text-green-400">GO</span>
-                        </div>
-                        <h2 id="action-text" class="text-5xl font-bold text-white uppercase tracking-widest"></h2>
+
+                    <!-- FASE 1: FLEXION -->
+                    <div id="action-flexion" class="center-content hidden">
+                        <div class="phase-badge bg-emerald-900/60 text-emerald-300 border-2 border-emerald-500">1 · FLEXION</div>
+                        <img id="action-img-flexion" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-emerald-500 bg-slate-900 shadow-2xl" src="">
+                        <h2 id="action-text-flexion" class="text-5xl font-bold text-emerald-400 uppercase tracking-widest"></h2>
+                        <p id="action-sub-flexion" class="text-2xl text-slate-400 mt-4"></p>
                     </div>
+
+                    <!-- FASE 2: HOLD (TAHAN) -->
+                    <div id="action-hold" class="center-content hidden">
+                        <div class="phase-badge bg-yellow-900/60 text-yellow-300 border-2 border-yellow-500">2 · TAHAN</div>
+                        <img id="action-img-hold" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-yellow-500 bg-slate-900 shadow-2xl hold-pulse" src="">
+                        <h2 id="action-text-hold" class="text-5xl font-bold text-yellow-400 uppercase tracking-widest">TAHAN</h2>
+                        <p id="action-sub-hold" class="text-2xl text-slate-400 mt-4"></p>
+                    </div>
+
+                    <!-- FASE 3: EXTENSION -->
+                    <div id="action-extension" class="center-content hidden">
+                        <div class="phase-badge bg-blue-900/60 text-blue-300 border-2 border-blue-500">3 · EXTENSION</div>
+                        <img id="action-img-extension" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-blue-500 bg-slate-900 shadow-2xl" src="">
+                        <h2 id="action-text-extension" class="text-5xl font-bold text-blue-400 uppercase tracking-widest"></h2>
+                        <p id="action-sub-extension" class="text-2xl text-slate-400 mt-4"></p>
+                    </div>
+
                     <div id="rest" class="center-content hidden">
                         <h2 class="text-3xl text-slate-400 mb-4">Istirahat</h2>
                         <div id="rest-timer" class="countdown-number text-white">5</div>
@@ -829,11 +906,13 @@
         }
 
         // ==================== EXPERIMENT ENGINE ====================
+        const ALL_PHASES = ['standby', 'fixation', 'instruction', 'action-flexion', 'action-hold', 'action-extension', 'rest', 'finished'];
+
         function setPhase(phaseName) {
             if (!isDisplayOpen()) return;
             try {
                 const doc = expWindow.document;
-                ['standby', 'fixation', 'instruction', 'action', 'rest', 'finished'].forEach(p => {
+                ALL_PHASES.forEach(p => {
                     const el = doc.getElementById(p);
                     if (el) el.classList.add('hidden');
                 });
@@ -920,6 +999,7 @@
                 addLog(`📋 Trial Mode: ${currentTrialModeLabel}`, 'info');
                 addLog(`📋 Movement Mode: ${currentMovementModeLabel}`, 'info');
                 addLog(`📋 Total Gerakan: ${currentMovementList.length}`, 'info');
+                addLog(`📋 Siklus per trial: Flexion(2s) → Hold(2s) → Extension(2s) → Rest(5s)`, 'info');
 
                 addLog("Mempersiapkan baseline (5 detik)...");
                 setPhase('standby');
@@ -954,37 +1034,63 @@
                         const movementName = trials[tIdx];
                         const movementInfo = MOVEMENTS[movementName];
                         const trialNum = tIdx + 1;
+                        const actLabel = (session.mode === 'ME') ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN";
                         document.getElementById('status-trial').innerText = trialNum;
 
+                        // ===== FASE 1: FIXATION =====
                         setPhase('fixation');
                         await wait(TIMING.fixation);
                         if(forceStop) break;
 
-                        setPopupSrc('inst-img', movementInfo.img);
+                        // ===== FASE 2: INSTRUCTION =====
+                        setPopupSrc('inst-img', movementInfo.phase.flexion.img);
                         setPopupText('inst-text', movementInfo.shortLabel);
                         setPhase('instruction');
                         await wait(TIMING.instruction);
                         if(forceStop) break;
 
-                        const actionStartTimeMs = Date.now() - globalStartTimeMs;
-                        const actionTimeStr = formatTimerMs(actionStartTimeMs);
+                        // ===== FASE 3a: FLEXION =====
+                        const flexionStartMs = Date.now() - globalStartTimeMs;
+                        const flexionStr = formatTimerMs(flexionStartMs);
 
-                        setPopupText('action-text', (session.mode === 'ME') ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN");
-                        setPhase('action');
+                        setPopupSrc('action-img-flexion', movementInfo.phase.flexion.img);
+                        setPopupText('action-text-flexion', movementInfo.phase.flexion.label);
+                        setPopupText('action-sub-flexion', actLabel);
+                        setPhase('action-flexion');
 
-                        addLog(`Trial ${trialNum}/${session.trialsCount} | ${movementInfo.displayName} | ${actionTimeStr}`);
+                        addLog(`Trial ${trialNum}/${session.trialsCount} | ${movementInfo.displayName} | FLEXION: ${flexionStr}`);
 
-                        sessionLogs.push({
-                            trial: trialNum,
-                            instruction: movementName,
-                            global_timestamp_ms: actionStartTimeMs,
-                            global_timestamp_str: actionTimeStr,
-                            start_time: new Date().toISOString()
-                        });
-
-                        await wait(TIMING.action);
+                        await wait(TIMING.flexion);
                         if(forceStop) break;
 
+                        // ===== FASE 3b: HOLD =====
+                        const holdStartMs = Date.now() - globalStartTimeMs;
+                        const holdStr = formatTimerMs(holdStartMs);
+
+                        setPopupSrc('action-img-hold', movementInfo.phase.hold.img);
+                        setPopupText('action-sub-hold', actLabel);
+                        setPhase('action-hold');
+
+                        addLog(`Trial ${trialNum}/${session.trialsCount} | ${movementInfo.displayName} | HOLD: ${holdStr}`);
+
+                        await wait(TIMING.hold);
+                        if(forceStop) break;
+
+                        // ===== FASE 3c: EXTENSION =====
+                        const extensionStartMs = Date.now() - globalStartTimeMs;
+                        const extensionStr = formatTimerMs(extensionStartMs);
+
+                        setPopupSrc('action-img-extension', movementInfo.phase.extension.img);
+                        setPopupText('action-text-extension', movementInfo.phase.extension.label);
+                        setPopupText('action-sub-extension', actLabel);
+                        setPhase('action-extension');
+
+                        addLog(`Trial ${trialNum}/${session.trialsCount} | ${movementInfo.displayName} | EXTENSION: ${extensionStr}`);
+
+                        await wait(TIMING.extension);
+                        if(forceStop) break;
+
+                        // ===== FASE 4: REST =====
                         setPhase('rest');
                         let restCount = TIMING.rest / 1000;
                         setPopupText('rest-timer', restCount);
@@ -999,6 +1105,23 @@
                                     setPopupText('rest-timer', restCount);
                                 }
                             }, 1000);
+                        });
+
+                        // Log 1 entry per trial dengan sub-fase timing
+                        sessionLogs.push({
+                            trial: trialNum,
+                            instruction: movementName,
+                            // Sub-fase
+                            flexion_ms: flexionStartMs,
+                            flexion_str: flexionStr,
+                            hold_ms: holdStartMs,
+                            hold_str: holdStr,
+                            extension_ms: extensionStartMs,
+                            extension_str: extensionStr,
+                            // Legacy fields (untuk kompatibilitas)
+                            global_timestamp_ms: flexionStartMs,
+                            global_timestamp_str: flexionStr,
+                            start_time: new Date().toISOString()
                         });
                     }
 
@@ -1018,7 +1141,6 @@
                         const pauseReason = getPauseReason(session, nextSession);
 
                         if (pauseReason) {
-                            // ==== PAUSE MANUAL (tombol kuning) ====
                             let pauseTitle, pauseSubtitle, logMsg, btnLabel;
 
                             if (pauseReason === 'movement-boundary') {
@@ -1026,7 +1148,7 @@
                                 pauseSubtitle = `Gerakan berikutnya: ${nextSession.movementInfo.displayName}`;
                                 btnLabel = `▶ LANJUT KE: ${nextSession.movementInfo.displayName}`;
                                 logMsg = `⏸️ PAUSE — Gerakan "${session.movementInfo.displayName}" selesai. Timer tetap jalan. Klik tombol Lanjut untuk ke "${nextSession.movementInfo.displayName}"`;
-                            } else { // practice-to-main
+                            } else {
                                 pauseTitle = `✅ ${session.label}`;
                                 pauseSubtitle = `Sesi berikutnya: ${nextSession.label}`;
                                 btnLabel = `▶ LANJUT KE: ${nextSession.label}`;
@@ -1062,7 +1184,6 @@
                             btnStartExp.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
                             btnStartExp.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
 
-                            // Auto countdown prep 3 detik
                             const prepTitle = (pauseReason === 'movement-boundary')
                                 ? nextSession.movementInfo.displayName
                                 : nextSession.label;
@@ -1078,7 +1199,6 @@
                                 await wait(1000);
                             }
                         } else {
-                            // ==== AUTO-TRANSISI (dalam gerakan yang sama, tanpa jeda khusus) ====
                             setPhase('standby');
                             setPopupHtml('standby', `
                                 <h1 class="text-3xl text-green-400 mb-4">Sesi Selesai</h1>
@@ -1285,16 +1405,22 @@
                 const trials = data.trials_data || [];
 
                 if (trials.length === 0) {
-                    trialList.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-slate-500">Tidak ada log trial.</td></tr>';
+                    trialList.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-500">Tidak ada log trial.</td></tr>';
                 } else {
                     trials.forEach(t => {
                         const tr = document.createElement('tr');
                         const movement = MOVEMENTS[t.instruction];
                         const colorClass = movement ? movement.colorClass : 'text-slate-300';
+                        // Fallback untuk data lama yang tidak punya sub-fase
+                        const flexStr = t.flexion_str || t.global_timestamp_str || '-';
+                        const holdStr = t.hold_str || '-';
+                        const extStr = t.extension_str || '-';
                         tr.innerHTML = `
                             <td class="p-3 text-center text-slate-400">${t.trial}</td>
                             <td class="p-3 ${colorClass} font-bold">${escapeHtml(t.instruction)}</td>
-                            <td class="p-3 text-right font-mono text-cyan-300">${t.global_timestamp_str}</td>
+                            <td class="p-3 text-right font-mono text-emerald-300 text-xs">${flexStr}</td>
+                            <td class="p-3 text-right font-mono text-yellow-300 text-xs">${holdStr}</td>
+                            <td class="p-3 text-right font-mono text-blue-300 text-xs">${extStr}</td>
                         `;
                         trialList.appendChild(tr);
                     });
@@ -1325,7 +1451,12 @@
                     "SubjectID", "Hand", "SessionMovement", "MovementIndex",
                     "Session", "SessionPhase", "Mode_MI_ME",
                     "TrialMode", "MovementMode", "MovementCount", "MovementList",
-                    "Trial", "Instruction", "GlobalTimestamp_String", "RealTimestamp",
+                    "Trial", "Instruction",
+                    "Flexion_ms", "Flexion_str",
+                    "Hold_ms", "Hold_str",
+                    "Extension_ms", "Extension_str",
+                    "Legacy_GlobalTimestamp_ms", "Legacy_GlobalTimestamp_str",
+                    "RealTimestamp",
                     "SessionStart_Relative", "SessionEnd_Relative",
                     "VideoRecordID", "SessionStartTimestamp"
                 ];
@@ -1350,7 +1481,7 @@
                             esc(session.mode),
                             esc(session.trial_mode || ""), esc(session.movement_mode || ""),
                             esc(session.movement_count ?? ""), esc(movementListStr),
-                            "", "", "", "",
+                            "", "", "", "", "", "", "", "", "", "", "",
                             esc(session.session_start_relative || ""), esc(session.session_end_relative || ""),
                             esc(session.video_record_id || ""), esc(session.session_start_timestamp || "")
                         ].join(","));
@@ -1364,7 +1495,11 @@
                                 esc(session.trial_mode || ""), esc(session.movement_mode || ""),
                                 esc(session.movement_count ?? ""), esc(movementListStr),
                                 esc(trial.trial), esc(trial.instruction),
-                                esc(trial.global_timestamp_str), esc(trial.start_time || ""),
+                                esc(trial.flexion_ms ?? ""), esc(trial.flexion_str ?? ""),
+                                esc(trial.hold_ms ?? ""), esc(trial.hold_str ?? ""),
+                                esc(trial.extension_ms ?? ""), esc(trial.extension_str ?? ""),
+                                esc(trial.global_timestamp_ms ?? ""), esc(trial.global_timestamp_str ?? ""),
+                                esc(trial.start_time || ""),
                                 esc(session.session_start_relative || ""), esc(session.session_end_relative || ""),
                                 esc(session.video_record_id || ""), esc(session.session_start_timestamp || "")
                             ].join(","));
