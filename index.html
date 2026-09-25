@@ -51,7 +51,7 @@
     <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center shadow-lg z-20">
         <div>
             <h1 class="text-xl font-bold text-blue-400">🧠 NeuroLab Controller</h1>
-            <p class="text-xs text-slate-400">Dual-Monitor • ME → MI • Flex-Hold-Ext Cycle</p>
+            <p class="text-xs text-slate-400">Dual-Monitor • ME → MI • Flex-Hold-Ext Cycle • Video→PC</p>
         </div>
         <div class="flex items-center gap-4">
             <div id="demo-badge" class="hidden px-3 py-1 bg-orange-900/60 text-orange-300 rounded text-xs font-bold border-2 border-orange-500 demo-pulse">
@@ -59,7 +59,7 @@
             </div>
             <div id="upload-status" class="hidden items-center gap-2 text-yellow-400 font-bold bg-yellow-900/30 px-4 py-2 rounded-lg border border-yellow-700">
                 <svg class="animate-spin h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                Mengunggah Video...
+                Memproses Video...
             </div>
             <div class="text-center">
                 <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Global Waktu (H:M:S.MS)</p>
@@ -227,7 +227,7 @@
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <h2 class="text-2xl font-bold text-blue-400">Manajemen Data Eksperimen</h2>
-                    <p class="text-slate-400 text-sm">Log sesi tersimpan di Database Supabase.</p>
+                    <p class="text-slate-400 text-sm">Log sesi tersimpan di Database Supabase. Video tersimpan di PC lokal.</p>
                 </div>
                 <div class="flex gap-3">
                     <button id="btn-download-all" class="bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded font-bold shadow transition flex items-center gap-2">
@@ -237,6 +237,15 @@
                         ← Kembali
                     </button>
                 </div>
+            </div>
+
+            <div class="mb-3 flex items-center gap-3 text-xs text-slate-400 flex-wrap">
+                <span class="font-bold text-slate-300">Keterangan:</span>
+                <span class="inline-flex items-center gap-1"><span class="bg-indigo-600 text-white px-2 py-0.5 rounded text-xs font-bold">Detail</span> = rincian trial</span>
+                <span class="inline-flex items-center gap-1"><span class="bg-teal-600 text-white px-2 py-0.5 rounded text-xs font-bold">📥 CSV</span> = unduh 1 sesi</span>
+                <span class="inline-flex items-center gap-1"><span class="bg-cyan-600 text-white px-2 py-0.5 rounded text-xs font-bold">📦 CSV</span> = unduh semua sesi responden</span>
+                <span class="inline-flex items-center gap-1"><span class="bg-red-600 text-white px-2 py-0.5 rounded text-xs font-bold">Hapus</span> = hapus sesi</span>
+                <span class="ml-auto text-yellow-400 font-bold">📹 Video: tersimpan di folder Downloads PC</span>
             </div>
 
             <div class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 overflow-hidden">
@@ -289,7 +298,10 @@
                     </table>
                 </div>
             </div>
-            <div class="p-4 border-t border-slate-700 text-right bg-slate-900 rounded-b-lg">
+            <div class="p-4 border-t border-slate-700 bg-slate-900 rounded-b-lg flex justify-between items-center">
+                <button id="btn-modal-download-csv" class="bg-teal-600 hover:bg-teal-500 text-white font-bold px-4 py-2 rounded transition text-sm">
+                    📥 Unduh CSV Sesi Ini
+                </button>
                 <button id="close-modal-footer-btn" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-6 py-2 rounded transition">Tutup</button>
             </div>
         </div>
@@ -299,7 +311,7 @@
         // ==================== SUPABASE CONFIG ====================
         const SUPABASE_URL = 'https://rkekwnmwuybxzmbptcwh.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_5p4UmkOLs41OWf97B-He4g_A2MRqC7T';
-        const VIDEO_BUCKET = 'video';
+        const VIDEO_BUCKET = 'video'; // masih dipakai untuk mode READ (kalau ada file lama di bucket)
 
         let _supabase = null;
         try {
@@ -336,6 +348,8 @@
         let streams = { face: null, body: null, screen: null };
         let recorders = { face: null, body: null, screen: null };
         let recordedChunks = { face: [], body: [], screen: [] };
+
+        let currentDetailSessionId = null;
 
         // ==================== ASSET GAMBAR ====================
         const ASSETS_BASE = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets";
@@ -491,22 +505,15 @@
 
                 if (expModeFilter === 'ALL' || expModeFilter === 'ME') {
                     queue.push({
-                        movement: movementName,
-                        movementInfo: mInfo,
-                        movementIndex: mIdx,
-                        movementTotal: movements.length,
-                        mode: 'ME',
-                        phase: 'Latihan',
-                        trialsCount: PRACTICE_TRIALS,
+                        movement: movementName, movementInfo: mInfo,
+                        movementIndex: mIdx, movementTotal: movements.length,
+                        mode: 'ME', phase: 'Latihan', trialsCount: PRACTICE_TRIALS,
                         label: `ME Latihan — ${mInfo.displayName}`
                     });
                     queue.push({
-                        movement: movementName,
-                        movementInfo: mInfo,
-                        movementIndex: mIdx,
-                        movementTotal: movements.length,
-                        mode: 'ME',
-                        phase: 'Utama',
+                        movement: movementName, movementInfo: mInfo,
+                        movementIndex: mIdx, movementTotal: movements.length,
+                        mode: 'ME', phase: 'Utama',
                         trialsCount: Math.max(0, counts.ME - PRACTICE_TRIALS),
                         label: `ME Utama — ${mInfo.displayName}`
                     });
@@ -514,22 +521,15 @@
 
                 if (expModeFilter === 'ALL' || expModeFilter === 'MI') {
                     queue.push({
-                        movement: movementName,
-                        movementInfo: mInfo,
-                        movementIndex: mIdx,
-                        movementTotal: movements.length,
-                        mode: 'MI',
-                        phase: 'Latihan',
-                        trialsCount: PRACTICE_TRIALS,
+                        movement: movementName, movementInfo: mInfo,
+                        movementIndex: mIdx, movementTotal: movements.length,
+                        mode: 'MI', phase: 'Latihan', trialsCount: PRACTICE_TRIALS,
                         label: `MI Latihan — ${mInfo.displayName}`
                     });
                     queue.push({
-                        movement: movementName,
-                        movementInfo: mInfo,
-                        movementIndex: mIdx,
-                        movementTotal: movements.length,
-                        mode: 'MI',
-                        phase: 'Utama',
+                        movement: movementName, movementInfo: mInfo,
+                        movementIndex: mIdx, movementTotal: movements.length,
+                        mode: 'MI', phase: 'Utama',
                         trialsCount: Math.max(0, counts.MI - PRACTICE_TRIALS),
                         label: `MI Utama — ${mInfo.displayName}`
                     });
@@ -541,22 +541,14 @@
 
         function getPauseReason(prevSession, nextSession) {
             if (!prevSession || !nextSession) return null;
-            if (nextSession.movementIndex !== prevSession.movementIndex) {
-                return 'movement-boundary';
-            }
+            if (nextSession.movementIndex !== prevSession.movementIndex) return 'movement-boundary';
             if (nextSession.phase === 'Utama'
                 && prevSession.phase === 'Latihan'
-                && nextSession.mode === prevSession.mode) {
-                return 'practice-to-main';
-            }
+                && nextSession.mode === prevSession.mode) return 'practice-to-main';
             return null;
         }
 
-        // ==================== FALLBACK DOWNLOAD HELPERS (BARU) ====================
-        /**
-         * Trigger download blob ke folder Downloads perangkat peneliti.
-         * Return true jika berhasil memicu download, false jika gagal.
-         */
+        // ==================== DOWNLOAD HELPERS ====================
         function downloadBlob(blob, filename) {
             try {
                 const url = URL.createObjectURL(blob);
@@ -567,7 +559,6 @@
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                // Beri waktu browser untuk memproses download sebelum revoke
                 setTimeout(() => {
                     try { URL.revokeObjectURL(url); } catch (e) {}
                 }, 8000);
@@ -578,17 +569,11 @@
             }
         }
 
-        /**
-         * Bersihkan subjectId untuk dijadikan nama file.
-         */
         function sanitizeForFilename(str) {
             if (!str) return 'Unknown';
             return String(str).replace(/[^A-Za-z0-9_-]/g, '_');
         }
 
-        /**
-         * Download backup log sebagai JSON (fallback jika DB gagal).
-         */
         function downloadLogBackupJSON(subjectId) {
             try {
                 const safeId = sanitizeForFilename(subjectId);
@@ -629,9 +614,6 @@
             }
         }
 
-        /**
-         * Download backup log sebagai CSV (fallback tambahan).
-         */
         function downloadLogBackupCSV(subjectId) {
             try {
                 const safeId = sanitizeForFilename(subjectId);
@@ -1024,86 +1006,55 @@
             document.querySelectorAll('.rec-status').forEach(el => el.style.display = 'none');
         }
 
-        // ============ UPLOAD DENGAN AUTO-DOWNLOAD FALLBACK ============
+        // ============ DOWNLOAD VIDEO KE PC (TANPA UPLOAD SUPABASE) ============
         async function processAndUploadVideos(subjectId) {
             const timestamp = globalVideoRecordId;
             const uploadIndicator = document.getElementById('upload-status');
             uploadIndicator.classList.remove('hidden');
             uploadIndicator.classList.add('flex');
-            addLog(`⏳ Mengompres dan mengunggah video...`, 'warning');
+            addLog(`⏳ Memproses video untuk diunduh ke PC...`, 'warning');
 
             const safeSubjectId = sanitizeForFilename(subjectId);
-            const failedFiles = []; // menyimpan file yang gagal diunggah untuk diunduh lokal
-            const uploadTasks = [];
+            const toDownload = [];
 
             for (const type of ['face', 'body', 'screen']) {
                 if (recordedChunks[type].length > 0) {
                     const blob = new Blob(recordedChunks[type], { type: 'video/webm' });
                     const filename = `${safeSubjectId}_${timestamp}_${type.toUpperCase()}.webm`;
-                    addLog(`📤 Uploading ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)...`);
-
-                    const task = (async () => {
-                        if (!_supabase) {
-                            failedFiles.push({
-                                type, blob, filename,
-                                reason: 'Supabase tidak tersedia'
-                            });
-                            addLog(`❌ Supabase tidak tersedia — ${type.toUpperCase()} akan diunduh ke perangkat`, 'error');
-                            return;
-                        }
-                        try {
-                            const { error } = await _supabase.storage
-                                .from(VIDEO_BUCKET)
-                                .upload(filename, blob, {
-                                    cacheControl: '3600',
-                                    upsert: false
-                                });
-                            if (error) {
-                                failedFiles.push({
-                                    type, blob, filename,
-                                    reason: error.message || 'Unknown error'
-                                });
-                                addLog(`❌ Gagal unggah ${filename}: ${error.message}`, 'error');
-                            } else {
-                                addLog(`✅ Berhasil unggah: ${filename}`, 'success');
-                            }
-                        } catch (e) {
-                            failedFiles.push({
-                                type, blob, filename,
-                                reason: e.message || 'Exception saat upload'
-                            });
-                            addLog(`❌ Error unggah ${filename}: ${e.message}`, 'error');
-                        }
-                    })();
-                    uploadTasks.push(task);
+                    toDownload.push({ type, blob, filename });
                 }
             }
 
-            await Promise.all(uploadTasks);
+            if (toDownload.length === 0) {
+                uploadIndicator.classList.add('hidden');
+                uploadIndicator.classList.remove('flex');
+                addLog(`⚠️ Tidak ada video yang direkam.`, 'warning');
+                return;
+            }
+
+            addLog(`⬇️ Mengunduh ${toDownload.length} file video ke folder Downloads PC...`, 'warning');
+
+            for (let i = 0; i < toDownload.length; i++) {
+                const f = toDownload[i];
+                const sizeMB = (f.blob.size / 1024 / 1024).toFixed(2);
+                addLog(`💾 [${i + 1}/${toDownload.length}] Mengunduh ${f.filename} (${sizeMB} MB)...`);
+
+                const ok = downloadBlob(f.blob, f.filename);
+                if (ok) {
+                    addLog(`✅ [${i + 1}/${toDownload.length}] Terunduh: ${f.filename}`, 'success');
+                } else {
+                    addLog(`❌ [${i + 1}/${toDownload.length}] Gagal unduh: ${f.filename}`, 'error');
+                }
+
+                // Jeda antar download supaya browser tidak memblokir multiple download
+                if (i < toDownload.length - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
 
             uploadIndicator.classList.add('hidden');
             uploadIndicator.classList.remove('flex');
-
-            // ==== FALLBACK: Auto-download file yang gagal ====
-            if (failedFiles.length > 0) {
-                addLog(`⬇️ ${failedFiles.length} video gagal diunggah ke Supabase. Mengunduh ke perangkat lokal...`, 'warning');
-                for (let i = 0; i < failedFiles.length; i++) {
-                    const f = failedFiles[i];
-                    const ok = downloadBlob(f.blob, f.filename);
-                    if (ok) {
-                        addLog(`💾 [${i + 1}/${failedFiles.length}] Terunduh ke Downloads: ${f.filename}`, 'success');
-                    } else {
-                        addLog(`❌ [${i + 1}/${failedFiles.length}] Gagal unduh lokal: ${f.filename}`, 'error');
-                    }
-                    // Beri jeda antar download agar browser tidak memblokir multiple download
-                    if (i < failedFiles.length - 1) {
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-                }
-                addLog(`🎉 ${failedFiles.length} file video tersimpan di folder Downloads perangkat ini.`, 'success');
-            } else {
-                addLog(`🎉 Semua file media selesai diproses.`, 'success');
-            }
+            addLog(`🎉 ${toDownload.length} file video tersimpan di folder Downloads PC.`, 'success');
         }
 
         // ==================== EXPERIMENT ENGINE ====================
@@ -1345,6 +1296,7 @@
                 addLog(`📋 Movement Mode: ${currentMovementModeLabel}`, 'info');
                 addLog(`📋 Total Gerakan: ${currentMovementList.length}`, 'info');
                 addLog(`📋 Siklus per trial: BERSIAP(2s) → Flexion(2s) → Hold(2s) → Extension(2s) → Rest(5s)`, 'info');
+                addLog(`📋 Video akan diunduh ke PC setelah sesi selesai`, 'info');
 
                 addLog("Mempersiapkan baseline (5 detik)...");
                 setPhase('standby');
@@ -1570,7 +1522,7 @@
             }
         });
 
-        // ============ DATABASE SAVE DENGAN AUTO-BACKUP ============
+        // ============ DATABASE SAVE ============
         async function saveAllDataToDB(subjectId, hand) {
             let dbFailed = false;
             let dbErrorMessage = '';
@@ -1616,9 +1568,8 @@
                 }
             }
 
-            // ==== FALLBACK: Auto-download log sebagai file backup ====
             if (dbFailed) {
-                addLog(`⬇️ Menyimpan log sebagai file backup ke perangkat (alasan: ${dbErrorMessage})...`, 'warning');
+                addLog(`⬇️ Menyimpan log sebagai file backup ke PC (alasan: ${dbErrorMessage})...`, 'warning');
                 const okJson = downloadLogBackupJSON(subjectId);
                 await new Promise(r => setTimeout(r, 500));
                 const okCsv = downloadLogBackupCSV(subjectId);
@@ -1644,6 +1595,130 @@
             mainView.classList.remove('hidden');
         });
 
+        // ============ CSV BUILDER HELPERS ============
+        const CSV_HEADERS = [
+            "SubjectID","Hand","SessionMovement","MovementIndex",
+            "Session","SessionPhase","Mode_MI_ME",
+            "TrialMode","MovementMode","MovementCount","MovementList",
+            "Trial","Instruction",
+            "Flexion_ms","Flexion_str",
+            "Hold_ms","Hold_str",
+            "Extension_ms","Extension_str",
+            "Legacy_GlobalTimestamp_ms","Legacy_GlobalTimestamp_str",
+            "RealTimestamp",
+            "SessionStart_Relative","SessionEnd_Relative",
+            "VideoRecordID","SessionStartTimestamp"
+        ];
+
+        function csvEscape(val) {
+            if (val === null || val === undefined) return '""';
+            return `"${String(val).replace(/"/g, '""')}"`;
+        }
+
+        function buildCSVRowsForSession(session) {
+            const rows = [];
+            const movementListStr = Array.isArray(session.movement_list)
+                ? session.movement_list.join(" | ") : "";
+            const trials = session.trials_data || [];
+
+            if (trials.length === 0) {
+                rows.push([
+                    csvEscape(session.subject_id), csvEscape(session.hand),
+                    csvEscape(session.session_movement || ""), csvEscape(session.session_movement_index ?? ""),
+                    csvEscape(session.session_type), csvEscape(session.session_phase || ""),
+                    csvEscape(session.mode),
+                    csvEscape(session.trial_mode || ""), csvEscape(session.movement_mode || ""),
+                    csvEscape(session.movement_count ?? ""), csvEscape(movementListStr),
+                    "", "", "", "", "", "", "", "", "", "", "",
+                    csvEscape(session.session_start_relative || ""), csvEscape(session.session_end_relative || ""),
+                    csvEscape(session.video_record_id || ""), csvEscape(session.session_start_timestamp || "")
+                ].join(","));
+            } else {
+                trials.forEach(trial => {
+                    rows.push([
+                        csvEscape(session.subject_id), csvEscape(session.hand),
+                        csvEscape(session.session_movement || ""), csvEscape(session.session_movement_index ?? ""),
+                        csvEscape(session.session_type), csvEscape(session.session_phase || ""),
+                        csvEscape(session.mode),
+                        csvEscape(session.trial_mode || ""), csvEscape(session.movement_mode || ""),
+                        csvEscape(session.movement_count ?? ""), csvEscape(movementListStr),
+                        csvEscape(trial.trial), csvEscape(trial.instruction),
+                        csvEscape(trial.flexion_ms ?? ""), csvEscape(trial.flexion_str ?? ""),
+                        csvEscape(trial.hold_ms ?? ""), csvEscape(trial.hold_str ?? ""),
+                        csvEscape(trial.extension_ms ?? ""), csvEscape(trial.extension_str ?? ""),
+                        csvEscape(trial.global_timestamp_ms ?? ""), csvEscape(trial.global_timestamp_str ?? ""),
+                        csvEscape(trial.start_time || ""),
+                        csvEscape(session.session_start_relative || ""), csvEscape(session.session_end_relative || ""),
+                        csvEscape(session.video_record_id || ""), csvEscape(session.session_start_timestamp || "")
+                    ].join(","));
+                });
+            }
+            return rows;
+        }
+
+        // ============ DOWNLOAD CSV: 1 SESI ============
+        window.downloadSessionCSV = async function(id) {
+            try {
+                const { data, error } = await _supabase
+                    .from('experiment_sessions').select('*').eq('id', id).single();
+                if (error) throw error;
+
+                const rows = [CSV_HEADERS.join(","), ...buildCSVRowsForSession(data)];
+                const csv = "\uFEFF" + rows.join("\n");
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
+                const safeSubject = sanitizeForFilename(data.subject_id);
+                const safeSession = sanitizeForFilename(data.session_type || 'session');
+                const ts = (data.video_record_id || new Date().toISOString()).replace(/[:.]/g, '-');
+                const filename = `${safeSubject}_${safeSession}_${ts}.csv`;
+
+                if (downloadBlob(blob, filename)) {
+                    console.log(`💾 CSV (1 sesi) diunduh: ${filename}`);
+                }
+            } catch (err) {
+                alert("Gagal unduh CSV sesi: " + err.message);
+            }
+        };
+
+        // ============ DOWNLOAD CSV: SEMUA SESI RESPONDEN ============
+        window.downloadSubjectCSV = async function(videoRecordId, subjectId) {
+            try {
+                if (!videoRecordId) {
+                    alert("video_record_id tidak tersedia untuk baris ini.");
+                    return;
+                }
+
+                const { data, error } = await _supabase
+                    .from('experiment_sessions')
+                    .select('*')
+                    .eq('video_record_id', videoRecordId)
+                    .order('session_movement_index', { ascending: true });
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    alert("Tidak ada data untuk responden ini.");
+                    return;
+                }
+
+                const allRows = [CSV_HEADERS.join(",")];
+                data.forEach(session => {
+                    allRows.push(...buildCSVRowsForSession(session));
+                });
+
+                const csv = "\uFEFF" + allRows.join("\n");
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const safeSubject = sanitizeForFilename(subjectId);
+                const ts = String(videoRecordId).replace(/[:.]/g, '-');
+                const filename = `${safeSubject}_${ts}_ALL_SESSIONS.csv`;
+
+                if (downloadBlob(blob, filename)) {
+                    console.log(`💾 CSV (semua sesi) diunduh: ${filename} (${data.length} sesi)`);
+                }
+            } catch (err) {
+                alert("Gagal unduh CSV responden: " + err.message);
+            }
+        };
+
+        // ============ HISTORY TABLE ============
         async function fetchDataHistory() {
             const tbody = document.getElementById('data-table-body');
             tbody.innerHTML = '<tr><td colspan="10" class="p-8 text-center text-slate-500">Memuat data...</td></tr>';
@@ -1671,6 +1746,8 @@
                     tr.className = "hover:bg-slate-800/50 transition duration-150";
                     const date = new Date(row.created_at).toLocaleString('id-ID');
                     const badgeClass = row.mode === 'ME' ? 'bg-blue-900/50 text-blue-300 border-blue-800' : 'bg-purple-900/50 text-purple-300 border-purple-800';
+                    const safeSubjectForAttr = escapeHtml(row.subject_id).replace(/'/g, "\\'");
+                    const safeVidIdForAttr = escapeHtml(row.video_record_id || '').replace(/'/g, "\\'");
 
                     tr.innerHTML = `
                         <td class="p-3 text-xs">${date}</td>
@@ -1682,9 +1759,11 @@
                         <td class="p-3 text-xs text-slate-400">${escapeHtml(row.movement_mode || '-')}</td>
                         <td class="p-3 text-slate-300">${row.hand}</td>
                         <td class="p-3 text-center font-mono">${row.trials_data?.length || 0}</td>
-                        <td class="p-3 text-right">
-                            <button onclick="window.viewSessionDetail('${row.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded text-xs font-bold shadow transition mr-2">Detail</button>
-                            <button onclick="window.deleteSession('${row.id}')" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs font-bold shadow transition">Hapus</button>
+                        <td class="p-3 text-right whitespace-nowrap">
+                            <button onclick="window.viewSessionDetail('${row.id}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded text-xs font-bold shadow transition mr-1" title="Lihat detail trial">Detail</button>
+                            <button onclick="window.downloadSessionCSV('${row.id}')" class="bg-teal-600 hover:bg-teal-500 text-white px-2 py-1 rounded text-xs font-bold shadow transition mr-1" title="Unduh CSV 1 sesi ini">📥 CSV</button>
+                            <button onclick="window.downloadSubjectCSV('${safeVidIdForAttr}', '${safeSubjectForAttr}')" class="bg-cyan-600 hover:bg-cyan-500 text-white px-2 py-1 rounded text-xs font-bold shadow transition mr-1" title="Unduh CSV semua sesi responden ini">📦 CSV</button>
+                            <button onclick="window.deleteSession('${row.id}')" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs font-bold shadow transition" title="Hapus sesi">Hapus</button>
                         </td>
                     `;
                     tbody.appendChild(tr);
@@ -1694,143 +1773,30 @@
             }
         }
 
-        // ============ ROBUST VIDEO RESOLVER ============
-        async function listAllVideoFiles() {
-            const all = [];
-            const pageSize = 100;
-            let offset = 0;
-            try {
-                while (true) {
-                    const { data, error } = await _supabase.storage
-                        .from(VIDEO_BUCKET)
-                        .list('', { limit: pageSize, offset, sortBy: { column: 'name', order: 'asc' } });
-                    if (error) {
-                        console.warn('List error:', error);
-                        break;
-                    }
-                    if (!data || data.length === 0) break;
-                    all.push(...data);
-                    if (data.length < pageSize) break;
-                    offset += pageSize;
-                    if (offset > 5000) break;
-                }
-            } catch (e) {
-                console.warn('List exception:', e);
-            }
-            return all;
-        }
-
-        function findVideoFile(allFiles, baseName, type) {
-            const targetUpper = `${baseName}_${type}.webm`.toUpperCase();
-            let f = allFiles.find(x => x.name === `${baseName}_${type}.webm`);
-            if (f) return f.name;
-            f = allFiles.find(x => x.name.toUpperCase() === targetUpper);
-            if (f) return f.name;
-            f = allFiles.find(x => x.name.toUpperCase().endsWith(`_${type}.WEBM`)
-                              && x.name.toUpperCase().includes(baseName.toUpperCase()));
-            if (f) return f.name;
-            return null;
-        }
-
-        async function getUrlForFile(filename) {
-            if (!filename) return { url: null, mode: null };
-            try {
-                const { data: signed, error: se } = await _supabase.storage
-                    .from(VIDEO_BUCKET).createSignedUrl(filename, 3600);
-                if (!se && signed?.signedUrl) {
-                    return { url: signed.signedUrl, mode: 'signed' };
-                }
-            } catch (e) {}
-            try {
-                const { data: pub } = _supabase.storage
-                    .from(VIDEO_BUCKET).getPublicUrl(filename);
-                if (pub?.publicUrl) return { url: pub.publicUrl, mode: 'public' };
-            } catch (e) {}
-            return { url: null, mode: null };
-        }
-
+        // ============ SESSION DETAIL MODAL ============
         window.viewSessionDetail = async function(id) {
             try {
+                currentDetailSessionId = id;
                 const { data, error } = await _supabase.from('experiment_sessions').select('*').eq('id', id).single();
                 if (error) throw error;
 
-                let fileTimestamp = data.video_record_id;
-                if (!fileTimestamp && data.session_start_timestamp) {
-                    try {
-                        const isoTs = data.session_start_timestamp.endsWith('Z')
-                            ? data.session_start_timestamp
-                            : data.session_start_timestamp + 'Z';
-                        fileTimestamp = new Date(isoTs).toISOString().replace(/[:.]/g, '-');
-                    } catch (e) {
-                        fileTimestamp = String(data.session_start_timestamp).replace(/[:.]/g, '-');
-                    }
-                }
-
+                // Info video lokal
                 const safeSubjectId = sanitizeForFilename(data.subject_id);
+                const fileTimestamp = (data.video_record_id || '').replace(/[:.]/g, '-');
                 const baseFilename = `${safeSubjectId}_${fileTimestamp}`;
-                console.log(`🎥 [Detail] Looking for base: "${baseFilename}"`);
 
-                const allFiles = await listAllVideoFiles();
-                console.log(`📁 [Detail] Total files in bucket: ${allFiles.length}`);
-
-                const faceFile   = findVideoFile(allFiles, baseFilename, 'FACE');
-                const bodyFile   = findVideoFile(allFiles, baseFilename, 'BODY');
-                const screenFile = findVideoFile(allFiles, baseFilename, 'SCREEN');
-                console.log(`🔍 [Detail] Matched: FACE=${faceFile}, BODY=${bodyFile}, SCREEN=${screenFile}`);
-
-                const faceRes   = await getUrlForFile(faceFile);
-                const bodyRes   = await getUrlForFile(bodyFile);
-                const screenRes = await getUrlForFile(screenFile);
-
-                const videoLinksHtml = `
-                    <div class="flex gap-3 flex-wrap">
-                        ${faceRes.url
-                            ? `<a href="${faceRes.url}" target="_blank" class="bg-blue-900 hover:bg-blue-800 text-blue-300 px-3 py-1.5 rounded text-xs font-bold transition border border-blue-700">📹 Video Wajah</a>`
-                            : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Wajah N/A</span>`}
-                        ${bodyRes.url
-                            ? `<a href="${bodyRes.url}" target="_blank" class="bg-green-900 hover:bg-green-800 text-green-300 px-3 py-1.5 rounded text-xs font-bold transition border border-green-700">📹 Video Badan</a>`
-                            : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Badan N/A</span>`}
-                        ${screenRes.url
-                            ? `<a href="${screenRes.url}" target="_blank" class="bg-purple-900 hover:bg-purple-800 text-purple-300 px-3 py-1.5 rounded text-xs font-bold transition border border-purple-700">📹 Video Layar</a>`
-                            : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Layar N/A</span>`}
+                const videoInfoHtml = `
+                    <div class="mt-3 p-3 bg-blue-950/40 border border-blue-700 rounded text-[11px] text-blue-200">
+                        <p class="font-bold mb-1">📹 Info Video (Tersimpan di PC Lokal)</p>
+                        <p class="text-slate-300 mb-2">File video tersimpan di folder <b>Downloads</b> PC tempat eksperimen dijalankan dengan nama:</p>
+                        <ul class="list-disc ml-5 mb-2 text-slate-200">
+                            <li><code>${escapeHtml(baseFilename)}_FACE.webm</code></li>
+                            <li><code>${escapeHtml(baseFilename)}_BODY.webm</code></li>
+                            <li><code>${escapeHtml(baseFilename)}_SCREEN.webm</code></li>
+                        </ul>
+                        <p class="text-slate-400 italic">Cari manual di PC tersebut. Video tidak diunggah ke cloud.</p>
                     </div>
                 `;
-
-                let diagnosticHtml = '';
-                const missingCount = [faceFile, bodyFile, screenFile].filter(x => !x).length;
-                if (missingCount > 0) {
-                    const expectedNames = [
-                        `${baseFilename}_FACE.webm`,
-                        `${baseFilename}_BODY.webm`,
-                        `${baseFilename}_SCREEN.webm`
-                    ];
-                    const matching = allFiles.filter(f => 
-                        f.name.toUpperCase().startsWith(baseFilename.toUpperCase())
-                    );
-                    const sampleAll = allFiles.slice(0, 8).map(f => f.name);
-
-                    diagnosticHtml = `
-                        <div class="mt-3 p-3 bg-red-950/40 border border-red-800 rounded text-[11px] text-red-200">
-                            <p class="font-bold mb-1">⚠️ ${missingCount} video tidak ditemukan di bucket <code>${VIDEO_BUCKET}</code></p>
-                            <p class="text-slate-400 mb-1">Nama yang dicari:</p>
-                            <ul class="list-disc ml-5 mb-2 text-slate-300">
-                                ${expectedNames.map(n => `<li><code>${escapeHtml(n)}</code></li>`).join('')}
-                            </ul>
-                            <p class="text-slate-400 mb-1">File dengan prefix "<code>${escapeHtml(baseFilename)}</code>":</p>
-                            ${matching.length > 0
-                                ? `<ul class="list-disc ml-5 text-emerald-300">${matching.map(f => `<li><code>${escapeHtml(f.name)}</code></li>`).join('')}</ul>`
-                                : `<p class="text-yellow-400 italic ml-3">— Tidak ada file dengan prefix ini —</p>`
-                            }
-                            <details class="mt-2">
-                                <summary class="cursor-pointer text-slate-400">Lihat ${allFiles.length} file di bucket (contoh 8 pertama)</summary>
-                                <ul class="list-disc ml-5 mt-1 text-slate-400">
-                                    ${sampleAll.map(n => `<li><code>${escapeHtml(n)}</code></li>`).join('')}
-                                </ul>
-                            </details>
-                            <p class="mt-2 text-slate-500 italic">Cek Console (F12) untuk log lengkap.</p>
-                        </div>
-                    `;
-                }
 
                 const movementListText = Array.isArray(data.movement_list) && data.movement_list.length
                     ? data.movement_list.join(", ") : "-";
@@ -1854,9 +1820,7 @@
                     </div>
 
                     <div class="col-span-2 md:col-span-3 mt-4 pt-4 border-t border-slate-700">
-                        <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Tautan Rekaman Video (Tersinkron)</p>
-                        ${videoLinksHtml}
-                        ${diagnosticHtml}
+                        ${videoInfoHtml}
                     </div>
                 `;
 
@@ -1900,71 +1864,16 @@
             } catch (err) { alert("Gagal menghapus: " + err.message); }
         };
 
-        // ==================== CSV EXPORT ====================
+        // ==================== CSV EXPORT (SEMUA) ====================
         document.getElementById('btn-download-all').addEventListener('click', async () => {
             try {
                 const { data, error } = await _supabase.from('experiment_sessions').select('*');
                 if (error) throw error;
                 if (!data || data.length === 0) { alert("Tidak ada data."); return; }
 
-                const headers = [
-                    "SubjectID", "Hand", "SessionMovement", "MovementIndex",
-                    "Session", "SessionPhase", "Mode_MI_ME",
-                    "TrialMode", "MovementMode", "MovementCount", "MovementList",
-                    "Trial", "Instruction",
-                    "Flexion_ms", "Flexion_str",
-                    "Hold_ms", "Hold_str",
-                    "Extension_ms", "Extension_str",
-                    "Legacy_GlobalTimestamp_ms", "Legacy_GlobalTimestamp_str",
-                    "RealTimestamp",
-                    "SessionStart_Relative", "SessionEnd_Relative",
-                    "VideoRecordID", "SessionStartTimestamp"
-                ];
-
-                const esc = (val) => {
-                    if (val === null || val === undefined) return '""';
-                    return `"${String(val).replace(/"/g, '""')}"`;
-                };
-
-                let csvRows = [headers.join(",")];
-
+                const csvRows = [CSV_HEADERS.join(",")];
                 data.forEach(session => {
-                    const trials = session.trials_data || [];
-                    const movementListStr = Array.isArray(session.movement_list)
-                        ? session.movement_list.join(" | ") : "";
-
-                    if (trials.length === 0) {
-                        csvRows.push([
-                            esc(session.subject_id), esc(session.hand),
-                            esc(session.session_movement || ""), esc(session.session_movement_index ?? ""),
-                            esc(session.session_type), esc(session.session_phase || ""),
-                            esc(session.mode),
-                            esc(session.trial_mode || ""), esc(session.movement_mode || ""),
-                            esc(session.movement_count ?? ""), esc(movementListStr),
-                            "", "", "", "", "", "", "", "", "", "", "",
-                            esc(session.session_start_relative || ""), esc(session.session_end_relative || ""),
-                            esc(session.video_record_id || ""), esc(session.session_start_timestamp || "")
-                        ].join(","));
-                    } else {
-                        trials.forEach(trial => {
-                            csvRows.push([
-                                esc(session.subject_id), esc(session.hand),
-                                esc(session.session_movement || ""), esc(session.session_movement_index ?? ""),
-                                esc(session.session_type), esc(session.session_phase || ""),
-                                esc(session.mode),
-                                esc(session.trial_mode || ""), esc(session.movement_mode || ""),
-                                esc(session.movement_count ?? ""), esc(movementListStr),
-                                esc(trial.trial), esc(trial.instruction),
-                                esc(trial.flexion_ms ?? ""), esc(trial.flexion_str ?? ""),
-                                esc(trial.hold_ms ?? ""), esc(trial.hold_str ?? ""),
-                                esc(trial.extension_ms ?? ""), esc(trial.extension_str ?? ""),
-                                esc(trial.global_timestamp_ms ?? ""), esc(trial.global_timestamp_str ?? ""),
-                                esc(trial.start_time || ""),
-                                esc(session.session_start_relative || ""), esc(session.session_end_relative || ""),
-                                esc(session.video_record_id || ""), esc(session.session_start_timestamp || "")
-                            ].join(","));
-                        });
-                    }
+                    csvRows.push(...buildCSVRowsForSession(session));
                 });
 
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
@@ -1977,11 +1886,17 @@
             } catch (err) { alert("Gagal mengunduh: " + err.message); }
         });
 
+        // ==================== MODAL CLOSE + TOMBOL CSV ====================
         const closeModals = () => document.getElementById('detail-modal').classList.add('hidden');
         document.getElementById('close-modal-btn').addEventListener('click', closeModals);
         document.getElementById('close-modal-footer-btn').addEventListener('click', closeModals);
         document.getElementById('detail-modal').addEventListener('click', (e) => {
             if (e.target.id === 'detail-modal') closeModals();
+        });
+        document.getElementById('btn-modal-download-csv').addEventListener('click', () => {
+            if (currentDetailSessionId) {
+                window.downloadSessionCSV(currentDetailSessionId);
+            }
         });
 
         updateModePreview();
