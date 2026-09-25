@@ -299,6 +299,7 @@
         // ==================== SUPABASE CONFIG ====================
         const SUPABASE_URL = 'https://rkekwnmwuybxzmbptcwh.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_5p4UmkOLs41OWf97B-He4g_A2MRqC7T';
+        const VIDEO_BUCKET = 'video';
 
         let _supabase = null;
         try {
@@ -413,8 +414,6 @@
         };
 
         const PRACTICE_TRIALS = 3;
-
-        // ==== Teks fase persiapan (BUKAN nama gerakan lagi) ====
         const PREP_TEXT = "BERSIAP";
 
         function getMovements(mode) {
@@ -425,7 +424,6 @@
             return mode === "3" ? "3 Gerakan (Hand, Wrist, Elbow UD)" : "5 Gerakan (Lengkap)";
         }
 
-        // ==================== TIMING ====================
         const TIMING = {
             fixation: 2000,
             instruction: 2000,
@@ -552,6 +550,78 @@
                 return 'practice-to-main';
             }
             return null;
+        }
+
+        // ==================== VIDEO RESOLVER (ROBUST) ====================
+        /**
+         * Ambil semua file di bucket 'video' (dengan pagination sederhana).
+         */
+        async function listAllVideoFiles() {
+            const all = [];
+            const pageSize = 100;
+            let offset = 0;
+            try {
+                while (true) {
+                    const { data, error } = await _supabase.storage
+                        .from(VIDEO_BUCKET)
+                        .list('', { limit: pageSize, offset, sortBy: { column: 'name', order: 'asc' } });
+                    if (error) {
+                        console.warn('List error:', error);
+                        break;
+                    }
+                    if (!data || data.length === 0) break;
+                    all.push(...data);
+                    if (data.length < pageSize) break;
+                    offset += pageSize;
+                    if (offset > 5000) break; // safety limit
+                }
+            } catch (e) {
+                console.warn('List exception:', e);
+            }
+            return all;
+        }
+
+        /**
+         * Cari nama file yang cocok dengan pola `{baseName}_{TYPE}.webm`
+         * dengan pencocokan case-insensitive. Return nama file asli atau null.
+         */
+        function findVideoFile(allFiles, baseName, type) {
+            const targetUpper = `${baseName}_${type}.webm`.toUpperCase();
+            // 1. Exact case-sensitive
+            let f = allFiles.find(x => x.name === `${baseName}_${type}.webm`);
+            if (f) return f.name;
+            // 2. Case-insensitive exact
+            f = allFiles.find(x => x.name.toUpperCase() === targetUpper);
+            if (f) return f.name;
+            // 3. Ends with (fallback longgar)
+            f = allFiles.find(x => x.name.toUpperCase().endsWith(`_${type}.WEBM`)
+                              && x.name.toUpperCase().includes(baseName.toUpperCase()));
+            if (f) return f.name;
+            return null;
+        }
+
+        /**
+         * Generate URL untuk file yang ADA.
+         * Coba signed URL dulu (works untuk private bucket),
+         * fallback ke public URL (works kalau bucket public).
+         */
+        async function getUrlForFile(filename) {
+            if (!filename) return { url: null, mode: null };
+            // 1. Signed
+            try {
+                const { data: signed, error: se } = await _supabase.storage
+                    .from(VIDEO_BUCKET).createSignedUrl(filename, 3600);
+                if (!se && signed?.signedUrl) {
+                    return { url: signed.signedUrl, mode: 'signed' };
+                }
+            } catch (e) {}
+            // 2. Public
+            try {
+                const { data: pub } = _supabase.storage
+                    .from(VIDEO_BUCKET).getPublicUrl(filename);
+                if (pub?.publicUrl) return { url: pub.publicUrl, mode: 'public' };
+            } catch (e) {}
+            return { url: null, mode: null };
         }
 
         // ==================== PREVIEW MODE ====================
@@ -796,7 +866,6 @@
                     </div>
                     <div id="fixation" class="center-content hidden"><div class="fixation-cross">+</div></div>
 
-                    <!-- INSTRUCTION: sekarang hanya menampilkan "BERSIAP" + gambar posisi flexion -->
                     <div id="instruction" class="center-content hidden">
                         <img id="inst-img" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-yellow-500 bg-slate-900 shadow-2xl prep-pulse" src="">
                         <h2 id="inst-text" class="text-5xl font-bold text-yellow-400 uppercase tracking-widest">BERSIAP</h2>
@@ -906,7 +975,7 @@
                     const filename = `${subjectId}_${timestamp}_${type.toUpperCase()}.webm`;
                     addLog(`📤 Uploading ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)...`);
 
-                    const task = _supabase.storage.from('video').upload(filename, blob, {
+                    const task = _supabase.storage.from(VIDEO_BUCKET).upload(filename, blob, {
                         cacheControl: '3600', upsert: false
                     }).then(({ error }) => {
                         if (error) addLog(`❌ Gagal unggah ${filename}: ${error.message}`, 'error');
@@ -1033,19 +1102,16 @@
                     document.getElementById('status-movement').innerText = `DEMO ${mIdx + 1}/${movements.length}: ${movementInfo.displayName}`;
                     document.getElementById('status-trial').innerText = 1;
 
-                    // Fixation
                     setPhase('fixation');
                     await wait(TIMING.fixation);
                     if (forceStop) break;
 
-                    // Instruction → tampilkan BERSIAP
                     setPopupSrc('inst-img', movementInfo.phase.flexion.img);
                     setPopupText('inst-text', PREP_TEXT);
                     setPhase('instruction');
                     await wait(TIMING.instruction);
                     if (forceStop) break;
 
-                    // Flexion
                     setPopupSrc('action-img-flexion', movementInfo.phase.flexion.img);
                     setPopupText('action-text-flexion', movementInfo.phase.flexion.label);
                     setPopupText('action-sub-flexion', 'DEMO');
@@ -1053,14 +1119,12 @@
                     await wait(TIMING.flexion);
                     if (forceStop) break;
 
-                    // Hold
                     setPopupSrc('action-img-hold', movementInfo.phase.hold.img);
                     setPopupText('action-sub-hold', 'DEMO');
                     setPhase('action-hold');
                     await wait(TIMING.hold);
                     if (forceStop) break;
 
-                    // Extension
                     setPopupSrc('action-img-extension', movementInfo.phase.extension.img);
                     setPopupText('action-text-extension', movementInfo.phase.extension.label);
                     setPopupText('action-sub-extension', 'DEMO');
@@ -1068,7 +1132,6 @@
                     await wait(TIMING.extension);
                     if (forceStop) break;
 
-                    // Rest singkat
                     setPhase('rest');
                     let restCount = 3;
                     setPopupText('rest-timer', restCount);
@@ -1084,7 +1147,6 @@
                         }, 1000);
                     });
 
-                    // Transisi
                     if (mIdx < movements.length - 1 && !forceStop) {
                         const nextMovement = MOVEMENTS[movements[mIdx + 1]];
                         setPhase('standby');
@@ -1202,19 +1264,16 @@
                         const actLabel = (session.mode === 'ME') ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN";
                         document.getElementById('status-trial').innerText = trialNum;
 
-                        // FIXATION
                         setPhase('fixation');
                         await wait(TIMING.fixation);
                         if(forceStop) break;
 
-                        // INSTRUCTION → selalu tampilkan BERSIAP
                         setPopupSrc('inst-img', movementInfo.phase.flexion.img);
                         setPopupText('inst-text', PREP_TEXT);
                         setPhase('instruction');
                         await wait(TIMING.instruction);
                         if(forceStop) break;
 
-                        // FLEXION
                         const flexionStartMs = Date.now() - globalStartTimeMs;
                         const flexionStr = formatTimerMs(flexionStartMs);
 
@@ -1228,7 +1287,6 @@
                         await wait(TIMING.flexion);
                         if(forceStop) break;
 
-                        // HOLD
                         const holdStartMs = Date.now() - globalStartTimeMs;
                         const holdStr = formatTimerMs(holdStartMs);
 
@@ -1241,7 +1299,6 @@
                         await wait(TIMING.hold);
                         if(forceStop) break;
 
-                        // EXTENSION
                         const extensionStartMs = Date.now() - globalStartTimeMs;
                         const extensionStr = formatTimerMs(extensionStartMs);
 
@@ -1255,7 +1312,6 @@
                         await wait(TIMING.extension);
                         if(forceStop) break;
 
-                        // REST
                         setPhase('rest');
                         let restCount = TIMING.rest / 1000;
                         setPopupText('rest-timer', restCount);
@@ -1297,7 +1353,6 @@
                         logs: sessionLogs
                     });
 
-                    // ============ TRANSISI ============
                     if (sIdx < SESSION_QUEUE.length - 1) {
                         const nextSession = SESSION_QUEUE[sIdx + 1];
                         const pauseReason = getPauseReason(session, nextSession);
@@ -1502,38 +1557,97 @@
             }
         }
 
+        // ============ VIEW SESSION DETAIL (FIXED: ROBUST VIDEO RESOLVER) ============
         window.viewSessionDetail = async function(id) {
             try {
                 const { data, error } = await _supabase.from('experiment_sessions').select('*').eq('id', id).single();
                 if (error) throw error;
 
+                // ==== Rekonstruksi base filename ====
                 let fileTimestamp = data.video_record_id;
                 if (!fileTimestamp && data.session_start_timestamp) {
-                    fileTimestamp = new Date(data.session_start_timestamp + 'Z').toISOString().replace(/[:.]/g, '-');
+                    try {
+                        const t = new Date(data.session_start_timestamp);
+                        // Jika timestamp tidak punya 'Z' (data lama), tambah
+                        const isoTs = data.session_start_timestamp.endsWith('Z')
+                            ? data.session_start_timestamp
+                            : data.session_start_timestamp + 'Z';
+                        fileTimestamp = new Date(isoTs).toISOString().replace(/[:.]/g, '-');
+                    } catch (e) {
+                        fileTimestamp = String(data.session_start_timestamp).replace(/[:.]/g, '-');
+                    }
                 }
 
                 const baseFilename = `${data.subject_id}_${fileTimestamp}`;
+                console.log(`🎥 [Detail] Looking for base: "${baseFilename}"`);
 
-                const getSignedUrl = async (type) => {
-                    try {
-                        const { data: signedData, error: signedError } = await _supabase.storage
-                            .from('video').createSignedUrl(`${baseFilename}_${type}.webm`, 3600);
-                        if (signedError || !signedData) return null;
-                        return signedData.signedUrl;
-                    } catch (err) { return null; }
-                };
+                // ==== STEP 1: Ambil semua file di bucket ====
+                const allFiles = await listAllVideoFiles();
+                console.log(`📁 [Detail] Total files in bucket: ${allFiles.length}`);
 
-                const [faceUrl, bodyUrl, screenUrl] = await Promise.all([
-                    getSignedUrl('FACE'), getSignedUrl('BODY'), getSignedUrl('SCREEN')
-                ]);
+                // ==== STEP 2: Cocokkan file per tipe ====
+                const faceFile   = findVideoFile(allFiles, baseFilename, 'FACE');
+                const bodyFile   = findVideoFile(allFiles, baseFilename, 'BODY');
+                const screenFile = findVideoFile(allFiles, baseFilename, 'SCREEN');
+                console.log(`🔍 [Detail] Matched: FACE=${faceFile}, BODY=${bodyFile}, SCREEN=${screenFile}`);
 
+                // ==== STEP 3: Ambil URL ====
+                const faceRes   = await getUrlForFile(faceFile);
+                const bodyRes   = await getUrlForFile(bodyFile);
+                const screenRes = await getUrlForFile(screenFile);
+                console.log(`🔗 [Detail] URLs:`, { face: faceRes, body: bodyRes, screen: screenRes });
+
+                // ==== STEP 4: Bangun HTML link video ====
                 const videoLinksHtml = `
-                    <div class="flex gap-4 flex-wrap">
-                        ${faceUrl ? `<a href="${faceUrl}" target="_blank" class="bg-blue-900 hover:bg-blue-800 text-blue-300 px-3 py-1.5 rounded text-xs font-bold transition border border-blue-700">📹 Video Wajah</a>` : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600">📹 Wajah N/A</span>`}
-                        ${bodyUrl ? `<a href="${bodyUrl}" target="_blank" class="bg-green-900 hover:bg-green-800 text-green-300 px-3 py-1.5 rounded text-xs font-bold transition border border-green-700">📹 Video Badan</a>` : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600">📹 Badan N/A</span>`}
-                        ${screenUrl ? `<a href="${screenUrl}" target="_blank" class="bg-purple-900 hover:bg-purple-800 text-purple-300 px-3 py-1.5 rounded text-xs font-bold transition border border-purple-700">📹 Video Layar</a>` : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600">📹 Layar N/A</span>`}
+                    <div class="flex gap-3 flex-wrap">
+                        ${faceRes.url
+                            ? `<a href="${faceRes.url}" target="_blank" class="bg-blue-900 hover:bg-blue-800 text-blue-300 px-3 py-1.5 rounded text-xs font-bold transition border border-blue-700">📹 Video Wajah</a>`
+                            : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Wajah N/A</span>`}
+                        ${bodyRes.url
+                            ? `<a href="${bodyRes.url}" target="_blank" class="bg-green-900 hover:bg-green-800 text-green-300 px-3 py-1.5 rounded text-xs font-bold transition border border-green-700">📹 Video Badan</a>`
+                            : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Badan N/A</span>`}
+                        ${screenRes.url
+                            ? `<a href="${screenRes.url}" target="_blank" class="bg-purple-900 hover:bg-purple-800 text-purple-300 px-3 py-1.5 rounded text-xs font-bold transition border border-purple-700">📹 Video Layar</a>`
+                            : `<span class="bg-slate-800 text-slate-500 px-3 py-1.5 rounded text-xs border border-slate-600 cursor-not-allowed">📹 Video Layar N/A</span>`}
                     </div>
                 `;
+
+                // ==== STEP 5: Diagnostik jika ada yang N/A ====
+                let diagnosticHtml = '';
+                const missingCount = [faceFile, bodyFile, screenFile].filter(x => !x).length;
+                if (missingCount > 0) {
+                    const expectedNames = [
+                        `${baseFilename}_FACE.webm`,
+                        `${baseFilename}_BODY.webm`,
+                        `${baseFilename}_SCREEN.webm`
+                    ];
+                    const matching = allFiles.filter(f => 
+                        f.name.toUpperCase().startsWith(baseFilename.toUpperCase())
+                    );
+                    const sampleAll = allFiles.slice(0, 8).map(f => f.name);
+
+                    diagnosticHtml = `
+                        <div class="mt-3 p-3 bg-red-950/40 border border-red-800 rounded text-[11px] text-red-200">
+                            <p class="font-bold mb-1">⚠️ ${missingCount} video tidak ditemukan di bucket <code>${VIDEO_BUCKET}</code></p>
+                            <p class="text-slate-400 mb-1">Nama yang dicari:</p>
+                            <ul class="list-disc ml-5 mb-2 text-slate-300">
+                                ${expectedNames.map(n => `<li><code>${escapeHtml(n)}</code></li>`).join('')}
+                            </ul>
+                            <p class="text-slate-400 mb-1">File dengan prefix "<code>${escapeHtml(baseFilename)}</code>":</p>
+                            ${matching.length > 0
+                                ? `<ul class="list-disc ml-5 text-emerald-300">${matching.map(f => `<li><code>${escapeHtml(f.name)}</code></li>`).join('')}</ul>`
+                                : `<p class="text-yellow-400 italic ml-3">— Tidak ada file dengan prefix ini —</p>`
+                            }
+                            <details class="mt-2">
+                                <summary class="cursor-pointer text-slate-400">Lihat ${allFiles.length} file di bucket (contoh 8 pertama)</summary>
+                                <ul class="list-disc ml-5 mt-1 text-slate-400">
+                                    ${sampleAll.map(n => `<li><code>${escapeHtml(n)}</code></li>`).join('')}
+                                </ul>
+                            </details>
+                            <p class="mt-2 text-slate-500 italic">Cek Console (F12) untuk log lengkap.</p>
+                        </div>
+                    `;
+                }
 
                 const movementListText = Array.isArray(data.movement_list) && data.movement_list.length
                     ? data.movement_list.join(", ") : "-";
@@ -1559,6 +1673,7 @@
                     <div class="col-span-2 md:col-span-3 mt-4 pt-4 border-t border-slate-700">
                         <p class="text-slate-500 text-xs uppercase tracking-wider mb-2">Tautan Rekaman Video (Tersinkron)</p>
                         ${videoLinksHtml}
+                        ${diagnosticHtml}
                     </div>
                 `;
 
@@ -1588,6 +1703,7 @@
                 }
                 document.getElementById('detail-modal').classList.remove('hidden');
             } catch (err) {
+                console.error('View detail error:', err);
                 alert("Gagal memuat detail: " + err.message);
             }
         };
