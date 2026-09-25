@@ -39,7 +39,6 @@
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
 
-        /* Demo badge pulse */
         .demo-pulse { animation: demoPulse 1.2s ease-in-out infinite; }
         @keyframes demoPulse {
             0%,100% { box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.7); }
@@ -162,7 +161,6 @@
             </div>
 
             <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 flex-1 flex flex-col min-h-[200px]">
-                <!-- TOMBOL MODE DEMO (BARU) -->
                 <button id="btn-demo-mode" class="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded font-bold text-sm mb-2 transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
                     🎬 MODE DEMO (Preview Urutan)
                 </button>
@@ -326,7 +324,7 @@
         let isWaitingForNextSession = false;
         let resolveNextSession = null;
         let isExperimentRunning = false;
-        let isDemoMode = false;   // BARU
+        let isDemoMode = false;
 
         let currentTrialMode = null;
         let currentMovementMode = null;
@@ -338,20 +336,19 @@
         let recorders = { face: null, body: null, screen: null };
         let recordedChunks = { face: [], body: [], screen: [] };
 
-        // ==================== ASSET GAMBAR (SUPABASE STORAGE) ====================
+        // ==================== ASSET GAMBAR ====================
         const ASSETS_BASE = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets";
 
-        // Mapping file → makna gerakan
-        const IMG_CLENCH       = `${ASSETS_BASE}/8.png`;   // 8 = clenching hand
-        const IMG_OPEN_HAND    = `${ASSETS_BASE}/7.png`;   // 7 = open hand
-        const IMG_WRIST_FLEX   = `${ASSETS_BASE}/6.png`;   // 6 = wrist flexion
-        const IMG_WRIST_EXT    = `${ASSETS_BASE}/5.png`;   // 5 = wrist extension
-        const IMG_ELBOW_EXT    = `${ASSETS_BASE}/4.png`;   // 4 = elbow extension (untuk Front Extension)
-        const IMG_ELBOW_FLEX   = `${ASSETS_BASE}/3.png`;   // 3 = elbow flexion (untuk Front Extension)
-        const IMG_ELBOW_PRON   = `${ASSETS_BASE}/2.png`;   // 2 = elbow pronation
-        const IMG_ELBOW_SUP    = `${ASSETS_BASE}/1.png`;   // 1 = elbow supination
-        const IMG_ELBOW_UD_FLEX = `${ASSETS_BASE}/9.jpeg`;  // 9 = elbow up (flexion) - Elbow Up-Down
-        const IMG_ELBOW_UD_EXT  = `${ASSETS_BASE}/10.jpeg`; // 10 = elbow down (extension) - Elbow Up-Down
+        const IMG_CLENCH       = `${ASSETS_BASE}/8.png`;
+        const IMG_OPEN_HAND    = `${ASSETS_BASE}/7.png`;
+        const IMG_WRIST_FLEX   = `${ASSETS_BASE}/6.png`;
+        const IMG_WRIST_EXT    = `${ASSETS_BASE}/5.png`;
+        const IMG_ELBOW_EXT    = `${ASSETS_BASE}/4.png`;
+        const IMG_ELBOW_FLEX   = `${ASSETS_BASE}/3.png`;
+        const IMG_ELBOW_PRON   = `${ASSETS_BASE}/2.png`;
+        const IMG_ELBOW_SUP    = `${ASSETS_BASE}/1.png`;
+        const IMG_ELBOW_UD_FLEX = `${ASSETS_BASE}/9.jpeg`;
+        const IMG_ELBOW_UD_EXT  = `${ASSETS_BASE}/10.jpeg`;
 
         // ==================== DEFINISI GERAKAN ====================
         const MOVEMENTS = {
@@ -375,7 +372,6 @@
                     extension: { img: IMG_WRIST_EXT,  label: "WRIST EXTENSION" }
                 }
             },
-            // ==== Elbow Up-Down: pakai 9.jpeg & 10.jpeg ====
             "Elbow Up-Down": {
                 displayName: "Elbow Up-Down",
                 shortLabel: "ELBOW UP-DOWN",
@@ -418,6 +414,9 @@
 
         const PRACTICE_TRIALS = 3;
 
+        // ==== Teks fase persiapan (BUKAN nama gerakan lagi) ====
+        const PREP_TEXT = "BERSIAP";
+
         function getMovements(mode) {
             return mode === "3" ? MOVEMENT_SET_3.slice() : MOVEMENT_SET_5.slice();
         }
@@ -426,7 +425,7 @@
             return mode === "3" ? "3 Gerakan (Hand, Wrist, Elbow UD)" : "5 Gerakan (Lengkap)";
         }
 
-        // ==================== TIMING (ms) ====================
+        // ==================== TIMING ====================
         const TIMING = {
             fixation: 2000,
             instruction: 2000,
@@ -579,7 +578,7 @@
             text += `Total ${movements.length} gerakan: <b>${totalTrials} trial</b> ≈ ${estMin} menit<br>`;
             text += `<span class="text-slate-500">Urutan per gerakan (ME dulu):</span><br>`;
             text += `ME Latihan(${PRACTICE_TRIALS}) <span class="text-yellow-400">⏸</span> → ME Utama(${meUtama}) → MI Latihan(${PRACTICE_TRIALS}) <span class="text-yellow-400">⏸</span> → MI Utama(${miUtama})<br>`;
-            text += `<span class="text-slate-500">Tiap trial (${secPerTrial}s):</span> Fixation(2) → Instruction(2) → <span class="text-emerald-400">Flex(2)</span> → <span class="text-yellow-400">Hold(2)</span> → <span class="text-blue-400">Ext(2)</span> → Rest(5)<br>`;
+            text += `<span class="text-slate-500">Tiap trial (${secPerTrial}s):</span> Fixation(2) → <span class="text-yellow-400">BERSIAP(2)</span> → <span class="text-emerald-400">Flex(2)</span> → <span class="text-yellow-400">Hold(2)</span> → <span class="text-blue-400">Ext(2)</span> → Rest(5)<br>`;
             text += `<span class="text-slate-500">Gerakan:</span> ${movements.join(" → ")}`;
             document.getElementById('mode-preview-text').innerHTML = text;
         }
@@ -774,6 +773,12 @@
                             50% { transform: scale(1.08); }
                             100% { transform: scale(1); }
                         }
+                        .prep-pulse { animation: prepPulse 1s ease-in-out infinite; }
+                        @keyframes prepPulse {
+                            0% { transform: scale(1); opacity: 1; }
+                            50% { transform: scale(1.04); opacity: 0.85; }
+                            100% { transform: scale(1); opacity: 1; }
+                        }
                         .countdown-number { font-size: 8rem; font-weight: bold; font-family: monospace; }
                         .hidden-preload { display: none; }
                         .phase-badge { display: inline-block; padding: 0.5rem 1.5rem; border-radius: 9999px; font-weight: bold; font-size: 1.25rem; letter-spacing: 0.1em; margin-bottom: 1rem; }
@@ -790,12 +795,13 @@
                         <h1 class="text-4xl text-slate-500">Menunggu Controller...</h1>
                     </div>
                     <div id="fixation" class="center-content hidden"><div class="fixation-cross">+</div></div>
+
+                    <!-- INSTRUCTION: sekarang hanya menampilkan "BERSIAP" + gambar posisi flexion -->
                     <div id="instruction" class="center-content hidden">
-                        <img id="inst-img" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-slate-700 bg-slate-900 shadow-2xl" src="">
-                        <h2 id="inst-text" class="text-5xl font-bold text-yellow-400 uppercase tracking-widest"></h2>
+                        <img id="inst-img" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-yellow-500 bg-slate-900 shadow-2xl prep-pulse" src="">
+                        <h2 id="inst-text" class="text-5xl font-bold text-yellow-400 uppercase tracking-widest">BERSIAP</h2>
                     </div>
 
-                    <!-- FASE 1: FLEXION -->
                     <div id="action-flexion" class="center-content hidden">
                         <div class="phase-badge bg-emerald-900/60 text-emerald-300 border-2 border-emerald-500">1 · FLEXION</div>
                         <img id="action-img-flexion" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-emerald-500 bg-slate-900 shadow-2xl" src="">
@@ -803,7 +809,6 @@
                         <p id="action-sub-flexion" class="text-2xl text-slate-400 mt-4"></p>
                     </div>
 
-                    <!-- FASE 2: HOLD -->
                     <div id="action-hold" class="center-content hidden">
                         <div class="phase-badge bg-yellow-900/60 text-yellow-300 border-2 border-yellow-500">2 · TAHAN</div>
                         <img id="action-img-hold" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-yellow-500 bg-slate-900 shadow-2xl hold-pulse" src="">
@@ -811,7 +816,6 @@
                         <p id="action-sub-hold" class="text-2xl text-slate-400 mt-4"></p>
                     </div>
 
-                    <!-- FASE 3: EXTENSION -->
                     <div id="action-extension" class="center-content hidden">
                         <div class="phase-badge bg-blue-900/60 text-blue-300 border-2 border-blue-500">3 · EXTENSION</div>
                         <img id="action-img-extension" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-blue-500 bg-slate-900 shadow-2xl" src="">
@@ -846,7 +850,7 @@
                     btnStartExp.disabled = true;
                     btnDemoMode.disabled = true;
                 }
-                addLog("⚠️ Layar eksperimen ditutup!", "error");
+                addLog("⚠️ Layar eksperimen ditutup!", 'error');
             });
         });
 
@@ -983,7 +987,7 @@
             checkReadyToStart();
         });
 
-        // ============ DEMO MODE (BARU) ============
+        // ============ DEMO MODE ============
         btnDemoMode.addEventListener('click', async () => {
             if (isDemoMode) return;
             if (isExperimentRunning) { alert("Eksperimen sedang berjalan."); return; }
@@ -992,9 +996,8 @@
             const movementMode = document.getElementById('movement-mode-selection').value;
             const movements = getMovements(movementMode);
 
-            // Set state DEMO
             isDemoMode = true;
-            isExperimentRunning = true; // lock tombol lain
+            isExperimentRunning = true;
             forceStop = false;
             btnStartExp.disabled = true;
             btnDemoMode.disabled = true;
@@ -1010,7 +1013,6 @@
             document.getElementById('status-total').innerText = movements.length;
 
             try {
-                // Baseline 3 detik
                 setPhase('standby');
                 setPopupHtml('standby', '<h1 class="text-4xl text-orange-400 mb-4">🎬 DEMO MODE</h1><p class="text-2xl text-slate-400 mt-4">Mulai dalam <span id="prep-cnt" class="text-white font-bold text-5xl">3</span>...</p>');
 
@@ -1036,9 +1038,9 @@
                     await wait(TIMING.fixation);
                     if (forceStop) break;
 
-                    // Instruction
+                    // Instruction → tampilkan BERSIAP
                     setPopupSrc('inst-img', movementInfo.phase.flexion.img);
-                    setPopupText('inst-text', movementInfo.shortLabel);
+                    setPopupText('inst-text', PREP_TEXT);
                     setPhase('instruction');
                     await wait(TIMING.instruction);
                     if (forceStop) break;
@@ -1066,7 +1068,7 @@
                     await wait(TIMING.extension);
                     if (forceStop) break;
 
-                    // Rest singkat (3 detik cukup untuk demo)
+                    // Rest singkat
                     setPhase('rest');
                     let restCount = 3;
                     setPopupText('rest-timer', restCount);
@@ -1082,7 +1084,7 @@
                         }, 1000);
                     });
 
-                    // Transisi ke gerakan berikutnya
+                    // Transisi
                     if (mIdx < movements.length - 1 && !forceStop) {
                         const nextMovement = MOVEMENTS[movements[mIdx + 1]];
                         setPhase('standby');
@@ -1164,7 +1166,7 @@
                 addLog(`📋 Trial Mode: ${currentTrialModeLabel}`, 'info');
                 addLog(`📋 Movement Mode: ${currentMovementModeLabel}`, 'info');
                 addLog(`📋 Total Gerakan: ${currentMovementList.length}`, 'info');
-                addLog(`📋 Siklus per trial: Flexion(2s) → Hold(2s) → Extension(2s) → Rest(5s)`, 'info');
+                addLog(`📋 Siklus per trial: BERSIAP(2s) → Flexion(2s) → Hold(2s) → Extension(2s) → Rest(5s)`, 'info');
 
                 addLog("Mempersiapkan baseline (5 detik)...");
                 setPhase('standby');
@@ -1205,9 +1207,9 @@
                         await wait(TIMING.fixation);
                         if(forceStop) break;
 
-                        // INSTRUCTION
+                        // INSTRUCTION → selalu tampilkan BERSIAP
                         setPopupSrc('inst-img', movementInfo.phase.flexion.img);
-                        setPopupText('inst-text', movementInfo.shortLabel);
+                        setPopupText('inst-text', PREP_TEXT);
                         setPhase('instruction');
                         await wait(TIMING.instruction);
                         if(forceStop) break;
