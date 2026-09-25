@@ -38,6 +38,13 @@
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+        /* Demo badge pulse */
+        .demo-pulse { animation: demoPulse 1.2s ease-in-out infinite; }
+        @keyframes demoPulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.7); }
+            50%     { box-shadow: 0 0 0 6px rgba(251, 146, 60, 0); }
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col">
@@ -48,6 +55,9 @@
             <p class="text-xs text-slate-400">Dual-Monitor • ME → MI • Flex-Hold-Ext Cycle</p>
         </div>
         <div class="flex items-center gap-4">
+            <div id="demo-badge" class="hidden px-3 py-1 bg-orange-900/60 text-orange-300 rounded text-xs font-bold border-2 border-orange-500 demo-pulse">
+                🎬 DEMO MODE
+            </div>
             <div id="upload-status" class="hidden items-center gap-2 text-yellow-400 font-bold bg-yellow-900/30 px-4 py-2 rounded-lg border border-yellow-700">
                 <svg class="animate-spin h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                 Mengunggah Video...
@@ -152,6 +162,11 @@
             </div>
 
             <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 flex-1 flex flex-col min-h-[200px]">
+                <!-- TOMBOL MODE DEMO (BARU) -->
+                <button id="btn-demo-mode" class="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 rounded font-bold text-sm mb-2 transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
+                    🎬 MODE DEMO (Preview Urutan)
+                </button>
+
                 <button id="btn-start-exp" class="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded font-bold text-lg mb-3 transition shadow-lg shadow-emerald-500/20" disabled>
                     ▶ MULAI EKSPERIMEN & REKAM
                 </button>
@@ -311,6 +326,7 @@
         let isWaitingForNextSession = false;
         let resolveNextSession = null;
         let isExperimentRunning = false;
+        let isDemoMode = false;   // BARU
 
         let currentTrialMode = null;
         let currentMovementMode = null;
@@ -325,21 +341,19 @@
         // ==================== ASSET GAMBAR (SUPABASE STORAGE) ====================
         const ASSETS_BASE = "https://rkekwnmwuybxzmbptcwh.supabase.co/storage/v1/object/public/assets";
 
-        // Mapping file PNG → makna gerakan
-        const IMG_CLENCH       = `${ASSETS_BASE}/8.png`; // 8 = clenching hand
-        const IMG_OPEN_HAND    = `${ASSETS_BASE}/7.png`; // 7 = open hand
-        const IMG_WRIST_FLEX   = `${ASSETS_BASE}/6.png`; // 6 = wrist flexion
-        const IMG_WRIST_EXT    = `${ASSETS_BASE}/5.png`; // 5 = wrist extension
-        const IMG_ELBOW_EXT    = `${ASSETS_BASE}/4.png`; // 4 = elbow extension
-        const IMG_ELBOW_FLEX   = `${ASSETS_BASE}/3.png`; // 3 = elbow flexion
-        const IMG_ELBOW_PRON   = `${ASSETS_BASE}/2.png`; // 2 = elbow pronation
-        const IMG_ELBOW_SUP    = `${ASSETS_BASE}/1.png`; // 1 = elbow supination
+        // Mapping file → makna gerakan
+        const IMG_CLENCH       = `${ASSETS_BASE}/8.png`;   // 8 = clenching hand
+        const IMG_OPEN_HAND    = `${ASSETS_BASE}/7.png`;   // 7 = open hand
+        const IMG_WRIST_FLEX   = `${ASSETS_BASE}/6.png`;   // 6 = wrist flexion
+        const IMG_WRIST_EXT    = `${ASSETS_BASE}/5.png`;   // 5 = wrist extension
+        const IMG_ELBOW_EXT    = `${ASSETS_BASE}/4.png`;   // 4 = elbow extension (untuk Front Extension)
+        const IMG_ELBOW_FLEX   = `${ASSETS_BASE}/3.png`;   // 3 = elbow flexion (untuk Front Extension)
+        const IMG_ELBOW_PRON   = `${ASSETS_BASE}/2.png`;   // 2 = elbow pronation
+        const IMG_ELBOW_SUP    = `${ASSETS_BASE}/1.png`;   // 1 = elbow supination
+        const IMG_ELBOW_UD_FLEX = `${ASSETS_BASE}/9.jpeg`;  // 9 = elbow up (flexion) - Elbow Up-Down
+        const IMG_ELBOW_UD_EXT  = `${ASSETS_BASE}/10.jpeg`; // 10 = elbow down (extension) - Elbow Up-Down
 
         // ==================== DEFINISI GERAKAN ====================
-        // Setiap gerakan punya 3 fase: flexion → hold → extension
-        // - flexion: posisi awal / kontraksi (gambar utama)
-        // - hold: TAHAN di posisi flexion (gambar sama dengan flexion, teks "TAHAN")
-        // - extension: gerakan balik / relaksasi (gambar berlawanan)
         const MOVEMENTS = {
             "Opening Hand": {
                 displayName: "Opening Hand",
@@ -361,14 +375,15 @@
                     extension: { img: IMG_WRIST_EXT,  label: "WRIST EXTENSION" }
                 }
             },
+            // ==== Elbow Up-Down: pakai 9.jpeg & 10.jpeg ====
             "Elbow Up-Down": {
                 displayName: "Elbow Up-Down",
                 shortLabel: "ELBOW UP-DOWN",
                 colorClass: "text-purple-400",
                 phase: {
-                    flexion:   { img: IMG_ELBOW_FLEX, label: "ELBOW FLEXION" },
-                    hold:      { img: IMG_ELBOW_FLEX, label: "TAHAN" },
-                    extension: { img: IMG_ELBOW_EXT,  label: "ELBOW EXTENSION" }
+                    flexion:   { img: IMG_ELBOW_UD_FLEX, label: "ELBOW UP" },
+                    hold:      { img: IMG_ELBOW_UD_FLEX, label: "TAHAN" },
+                    extension: { img: IMG_ELBOW_UD_EXT,  label: "ELBOW DOWN" }
                 }
             },
             "Elbow Front Extension": {
@@ -412,19 +427,19 @@
         }
 
         // ==================== TIMING (ms) ====================
-        // Setiap trial = fixation → instruction → FLEX → HOLD → EXT → rest
         const TIMING = {
             fixation: 2000,
             instruction: 2000,
-            flexion: 2000,     // 2s flexion
-            hold: 2000,        // 2s tahan
-            extension: 2000,   // 2s extension
+            flexion: 2000,
+            hold: 2000,
+            extension: 2000,
             rest: 5000
         };
 
         const elLog = document.getElementById('event-log');
         const elTimer = document.getElementById('global-timer');
         const btnStartExp = document.getElementById('btn-start-exp');
+        const btnDemoMode = document.getElementById('btn-demo-mode');
         const btnEmergency = document.getElementById('btn-emergency-stop');
         const btnViewHistory = document.getElementById('btn-view-history');
         const mainView = document.getElementById('main-view');
@@ -445,6 +460,7 @@
             if(type === 'error') colorClass = 'text-red-400 font-bold';
             if(type === 'success') colorClass = 'text-emerald-400 font-bold';
             if(type === 'warning') colorClass = 'text-yellow-400';
+            if(type === 'demo') colorClass = 'text-orange-400 font-bold';
             div.className = `mb-1 border-b border-slate-700/50 pb-1 ${colorClass}`;
             div.innerHTML = `<span class="text-cyan-500 font-bold">[${timeStr}]</span> ${message}`;
             elLog.appendChild(div);
@@ -461,20 +477,12 @@
             return `${h}:${m}:${s}.${mil}`;
         }
 
-        /**
-         * Setiap trial = 1 siklus penuh (flex-hold-ext) dari SATU gerakan.
-         * Tidak ada randomisasi — urutan selalu flexion → hold → extension.
-         */
         function generateTrialsForMovement(count, movementName) {
             const arr = [];
             for (let i = 0; i < count; i++) arr.push(movementName);
             return arr;
         }
 
-        /**
-         * Build session queue: setiap gerakan punya blok sesi sendiri.
-         * URUTAN: ME Latihan → ME Utama → MI Latihan → MI Utama
-         */
         function buildSessionQueue(trialMode, movementMode, expModeFilter) {
             const counts = TRIAL_MODES[trialMode];
             if (!counts) return [];
@@ -484,7 +492,6 @@
             movements.forEach((movementName, mIdx) => {
                 const mInfo = MOVEMENTS[movementName];
 
-                // ==== ME DULU ====
                 if (expModeFilter === 'ALL' || expModeFilter === 'ME') {
                     queue.push({
                         movement: movementName,
@@ -508,7 +515,6 @@
                     });
                 }
 
-                // ==== BARU MI ====
                 if (expModeFilter === 'ALL' || expModeFilter === 'MI') {
                     queue.push({
                         movement: movementName,
@@ -571,7 +577,7 @@
 
             let text = `Setiap gerakan: <b>${mePerMov} ME + ${miPerMov} MI = ${trialsPerMov} trial</b><br>`;
             text += `Total ${movements.length} gerakan: <b>${totalTrials} trial</b> ≈ ${estMin} menit<br>`;
-            text += `<span class="text-slate-500">Urutan per gerakan (ME dulu, jeda sebelum Utama):</span><br>`;
+            text += `<span class="text-slate-500">Urutan per gerakan (ME dulu):</span><br>`;
             text += `ME Latihan(${PRACTICE_TRIALS}) <span class="text-yellow-400">⏸</span> → ME Utama(${meUtama}) → MI Latihan(${PRACTICE_TRIALS}) <span class="text-yellow-400">⏸</span> → MI Utama(${miUtama})<br>`;
             text += `<span class="text-slate-500">Tiap trial (${secPerTrial}s):</span> Fixation(2) → Instruction(2) → <span class="text-emerald-400">Flex(2)</span> → <span class="text-yellow-400">Hold(2)</span> → <span class="text-blue-400">Ext(2)</span> → Rest(5)<br>`;
             text += `<span class="text-slate-500">Gerakan:</span> ${movements.join(" → ")}`;
@@ -636,15 +642,20 @@
 
         // ==================== READY-TO-START ====================
         function checkReadyToStart() {
+            const ready = isDisplayOpen();
+
             if (isWaitingForNextSession) {
                 btnStartExp.disabled = false;
+                btnDemoMode.disabled = true;
                 return;
             }
             if (isExperimentRunning) {
                 btnStartExp.disabled = true;
+                btnDemoMode.disabled = true;
                 return;
             }
-            btnStartExp.disabled = !isDisplayOpen();
+            btnStartExp.disabled = !ready;
+            btnDemoMode.disabled = !ready;
         }
 
         setInterval(checkReadyToStart, 500);
@@ -792,7 +803,7 @@
                         <p id="action-sub-flexion" class="text-2xl text-slate-400 mt-4"></p>
                     </div>
 
-                    <!-- FASE 2: HOLD (TAHAN) -->
+                    <!-- FASE 2: HOLD -->
                     <div id="action-hold" class="center-content hidden">
                         <div class="phase-badge bg-yellow-900/60 text-yellow-300 border-2 border-yellow-500">2 · TAHAN</div>
                         <img id="action-img-hold" class="mx-auto h-72 object-contain mb-6 rounded-xl border-4 border-yellow-500 bg-slate-900 shadow-2xl hold-pulse" src="">
@@ -833,6 +844,7 @@
                 document.getElementById('btn-open-display').innerHTML = "<span>📺 Buka Jendela Eksperimen</span>";
                 if (!isExperimentRunning && !isWaitingForNextSession) {
                     btnStartExp.disabled = true;
+                    btnDemoMode.disabled = true;
                 }
                 addLog("⚠️ Layar eksperimen ditutup!", "error");
             });
@@ -932,20 +944,34 @@
 
         // ============ EMERGENCY STOP ============
         document.getElementById('btn-emergency-stop').addEventListener('click', async () => {
+            const wasDemo = isDemoMode;
+
             forceStop = true;
             isExperimentRunning = false;
+            isDemoMode = false;
             if(currentTimeout) clearTimeout(currentTimeout);
             if(restInterval) clearInterval(restInterval);
             if(resolveNextSession) resolveNextSession();
 
-            stopGlobalTimer();
-            stopRecordingStreams();
+            if (!wasDemo) {
+                stopGlobalTimer();
+                stopRecordingStreams();
+            }
             setPhase('finished');
 
             btnStartExp.innerText = "MULAI ULANG EKSPERIMEN";
             btnStartExp.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
             btnStartExp.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
             document.getElementById('btn-emergency-stop').classList.add('hidden');
+            document.getElementById('demo-badge').classList.add('hidden');
+
+            if (wasDemo) {
+                addLog("🎬 DEMO MODE dihentikan — tidak ada data yang disimpan.", 'demo');
+                btnDemoMode.disabled = false;
+                btnStartExp.innerText = "▶ MULAI EKSPERIMEN & REKAM";
+                checkReadyToStart();
+                return;
+            }
 
             addLog("🛑 EKSPERIMEN DIHENTIKAN PAKSA! Menyimpan file...", 'error');
 
@@ -957,6 +983,143 @@
             checkReadyToStart();
         });
 
+        // ============ DEMO MODE (BARU) ============
+        btnDemoMode.addEventListener('click', async () => {
+            if (isDemoMode) return;
+            if (isExperimentRunning) { alert("Eksperimen sedang berjalan."); return; }
+            if (!isDisplayOpen()) { alert("Buka jendela eksperimen terlebih dahulu!"); return; }
+
+            const movementMode = document.getElementById('movement-mode-selection').value;
+            const movements = getMovements(movementMode);
+
+            // Set state DEMO
+            isDemoMode = true;
+            isExperimentRunning = true; // lock tombol lain
+            forceStop = false;
+            btnStartExp.disabled = true;
+            btnDemoMode.disabled = true;
+            document.getElementById('btn-emergency-stop').classList.remove('hidden');
+            document.getElementById('demo-badge').classList.remove('hidden');
+
+            addLog("🎬 MODE DEMO DIMULAI — TIDAK ada rekaman, TIDAK ada upload, TIDAK ada simpan DB.", 'demo');
+            addLog(`🎬 Demo akan menampilkan ${movements.length} gerakan (1 trial per gerakan).`, 'demo');
+
+            document.getElementById('status-movement').innerText = "DEMO MODE";
+            document.getElementById('status-session-name').innerText = "Preview";
+            document.getElementById('status-mode').innerText = "DEMO";
+            document.getElementById('status-total').innerText = movements.length;
+
+            try {
+                // Baseline 3 detik
+                setPhase('standby');
+                setPopupHtml('standby', '<h1 class="text-4xl text-orange-400 mb-4">🎬 DEMO MODE</h1><p class="text-2xl text-slate-400 mt-4">Mulai dalam <span id="prep-cnt" class="text-white font-bold text-5xl">3</span>...</p>');
+
+                for (let i = 3; i > 0; i--) {
+                    if (forceStop) return;
+                    setPopupText('prep-cnt', i);
+                    await wait(1000);
+                }
+
+                for (let mIdx = 0; mIdx < movements.length; mIdx++) {
+                    if (forceStop) break;
+
+                    const movementName = movements[mIdx];
+                    const movementInfo = MOVEMENTS[movementName];
+
+                    addLog(`🎬 Demo [${mIdx + 1}/${movements.length}] ${movementInfo.displayName}`, 'demo');
+
+                    document.getElementById('status-movement').innerText = `DEMO ${mIdx + 1}/${movements.length}: ${movementInfo.displayName}`;
+                    document.getElementById('status-trial').innerText = 1;
+
+                    // Fixation
+                    setPhase('fixation');
+                    await wait(TIMING.fixation);
+                    if (forceStop) break;
+
+                    // Instruction
+                    setPopupSrc('inst-img', movementInfo.phase.flexion.img);
+                    setPopupText('inst-text', movementInfo.shortLabel);
+                    setPhase('instruction');
+                    await wait(TIMING.instruction);
+                    if (forceStop) break;
+
+                    // Flexion
+                    setPopupSrc('action-img-flexion', movementInfo.phase.flexion.img);
+                    setPopupText('action-text-flexion', movementInfo.phase.flexion.label);
+                    setPopupText('action-sub-flexion', 'DEMO');
+                    setPhase('action-flexion');
+                    await wait(TIMING.flexion);
+                    if (forceStop) break;
+
+                    // Hold
+                    setPopupSrc('action-img-hold', movementInfo.phase.hold.img);
+                    setPopupText('action-sub-hold', 'DEMO');
+                    setPhase('action-hold');
+                    await wait(TIMING.hold);
+                    if (forceStop) break;
+
+                    // Extension
+                    setPopupSrc('action-img-extension', movementInfo.phase.extension.img);
+                    setPopupText('action-text-extension', movementInfo.phase.extension.label);
+                    setPopupText('action-sub-extension', 'DEMO');
+                    setPhase('action-extension');
+                    await wait(TIMING.extension);
+                    if (forceStop) break;
+
+                    // Rest singkat (3 detik cukup untuk demo)
+                    setPhase('rest');
+                    let restCount = 3;
+                    setPopupText('rest-timer', restCount);
+                    await new Promise(resolve => {
+                        restInterval = setInterval(() => {
+                            restCount--;
+                            if (restCount <= 0) {
+                                clearInterval(restInterval);
+                                resolve();
+                            } else {
+                                setPopupText('rest-timer', restCount);
+                            }
+                        }, 1000);
+                    });
+
+                    // Transisi ke gerakan berikutnya
+                    if (mIdx < movements.length - 1 && !forceStop) {
+                        const nextMovement = MOVEMENTS[movements[mIdx + 1]];
+                        setPhase('standby');
+                        setPopupHtml('standby', `
+                            <h1 class="text-3xl text-emerald-400 mb-4">✅ ${movementInfo.displayName}</h1>
+                            <p class="text-lg text-slate-400 mt-4">Demo berikutnya:</p>
+                            <p class="text-2xl text-yellow-400 font-bold">${nextMovement.displayName}</p>
+                            <p class="text-7xl text-white font-bold mt-8" id="trans-cnt">2</p>
+                        `);
+                        for (let i = 2; i > 0; i--) {
+                            if (forceStop) break;
+                            setPopupText('trans-cnt', i);
+                            await wait(1000);
+                        }
+                    }
+                }
+
+                if (!forceStop) {
+                    setPhase('finished');
+                    addLog("🎬 MODE DEMO SELESAI. Tidak ada data yang disimpan.", 'demo');
+                }
+            } catch (err) {
+                addLog("❌ Error saat demo: " + err.message, 'error');
+            } finally {
+                isDemoMode = false;
+                isExperimentRunning = false;
+                document.getElementById('btn-emergency-stop').classList.add('hidden');
+                document.getElementById('demo-badge').classList.add('hidden');
+                document.getElementById('status-movement').innerText = '-';
+                document.getElementById('status-session-name').innerText = '-';
+                document.getElementById('status-mode').innerText = '-';
+                document.getElementById('status-total').innerText = '0';
+                document.getElementById('status-trial').innerText = '0';
+                checkReadyToStart();
+            }
+        });
+
         // ============ START EXPERIMENT ============
         btnStartExp.addEventListener('click', async () => {
             if (isWaitingForNextSession) {
@@ -964,6 +1127,7 @@
                 return;
             }
             if (isExperimentRunning) return;
+            if (isDemoMode) { alert("Demo sedang berjalan."); return; }
 
             const subjectId = document.getElementById('subject-id').value.trim();
             if (!subjectId) { alert("Masukkan ID Partisipan!"); return; }
@@ -986,6 +1150,7 @@
             forceStop = false;
             isExperimentRunning = true;
             btnStartExp.disabled = true;
+            btnDemoMode.disabled = true;
             document.getElementById('btn-emergency-stop').classList.remove('hidden');
             experimentData = [];
 
@@ -1011,7 +1176,6 @@
                     await wait(1000);
                 }
 
-                // ==== Loop Sesi ====
                 for (let sIdx = 0; sIdx < SESSION_QUEUE.length; sIdx++) {
                     if(forceStop) break;
 
@@ -1027,7 +1191,6 @@
                     const sessionStartRelative = formatTimerMs(Date.now() - globalStartTimeMs);
                     let sessionLogs = [];
 
-                    // Loop Trial
                     for (let tIdx = 0; tIdx < trials.length; tIdx++) {
                         if(forceStop) break;
 
@@ -1037,19 +1200,19 @@
                         const actLabel = (session.mode === 'ME') ? "LAKUKAN GERAKAN" : "BAYANGKAN GERAKAN";
                         document.getElementById('status-trial').innerText = trialNum;
 
-                        // ===== FASE 1: FIXATION =====
+                        // FIXATION
                         setPhase('fixation');
                         await wait(TIMING.fixation);
                         if(forceStop) break;
 
-                        // ===== FASE 2: INSTRUCTION =====
+                        // INSTRUCTION
                         setPopupSrc('inst-img', movementInfo.phase.flexion.img);
                         setPopupText('inst-text', movementInfo.shortLabel);
                         setPhase('instruction');
                         await wait(TIMING.instruction);
                         if(forceStop) break;
 
-                        // ===== FASE 3a: FLEXION =====
+                        // FLEXION
                         const flexionStartMs = Date.now() - globalStartTimeMs;
                         const flexionStr = formatTimerMs(flexionStartMs);
 
@@ -1063,7 +1226,7 @@
                         await wait(TIMING.flexion);
                         if(forceStop) break;
 
-                        // ===== FASE 3b: HOLD =====
+                        // HOLD
                         const holdStartMs = Date.now() - globalStartTimeMs;
                         const holdStr = formatTimerMs(holdStartMs);
 
@@ -1076,7 +1239,7 @@
                         await wait(TIMING.hold);
                         if(forceStop) break;
 
-                        // ===== FASE 3c: EXTENSION =====
+                        // EXTENSION
                         const extensionStartMs = Date.now() - globalStartTimeMs;
                         const extensionStr = formatTimerMs(extensionStartMs);
 
@@ -1090,7 +1253,7 @@
                         await wait(TIMING.extension);
                         if(forceStop) break;
 
-                        // ===== FASE 4: REST =====
+                        // REST
                         setPhase('rest');
                         let restCount = TIMING.rest / 1000;
                         setPopupText('rest-timer', restCount);
@@ -1107,18 +1270,15 @@
                             }, 1000);
                         });
 
-                        // Log 1 entry per trial dengan sub-fase timing
                         sessionLogs.push({
                             trial: trialNum,
                             instruction: movementName,
-                            // Sub-fase
                             flexion_ms: flexionStartMs,
                             flexion_str: flexionStr,
                             hold_ms: holdStartMs,
                             hold_str: holdStr,
                             extension_ms: extensionStartMs,
                             extension_str: extensionStr,
-                            // Legacy fields (untuk kompatibilitas)
                             global_timestamp_ms: flexionStartMs,
                             global_timestamp_str: flexionStr,
                             start_time: new Date().toISOString()
@@ -1168,6 +1328,7 @@
 
                             isWaitingForNextSession = true;
                             btnStartExp.disabled = false;
+                            btnDemoMode.disabled = true;
                             btnStartExp.innerText = btnLabel;
                             btnStartExp.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
                             btnStartExp.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
@@ -1217,7 +1378,6 @@
                     }
                 }
 
-                // SELESAI
                 if(!forceStop) {
                     stopGlobalTimer();
                     stopRecordingStreams();
@@ -1411,7 +1571,6 @@
                         const tr = document.createElement('tr');
                         const movement = MOVEMENTS[t.instruction];
                         const colorClass = movement ? movement.colorClass : 'text-slate-300';
-                        // Fallback untuk data lama yang tidak punya sub-fase
                         const flexStr = t.flexion_str || t.global_timestamp_str || '-';
                         const holdStr = t.hold_str || '-';
                         const extStr = t.extension_str || '-';
