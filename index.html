@@ -552,76 +552,143 @@
             return null;
         }
 
-        // ==================== VIDEO RESOLVER (ROBUST) ====================
+        // ==================== FALLBACK DOWNLOAD HELPERS (BARU) ====================
         /**
-         * Ambil semua file di bucket 'video' (dengan pagination sederhana).
+         * Trigger download blob ke folder Downloads perangkat peneliti.
+         * Return true jika berhasil memicu download, false jika gagal.
          */
-        async function listAllVideoFiles() {
-            const all = [];
-            const pageSize = 100;
-            let offset = 0;
+        function downloadBlob(blob, filename) {
             try {
-                while (true) {
-                    const { data, error } = await _supabase.storage
-                        .from(VIDEO_BUCKET)
-                        .list('', { limit: pageSize, offset, sortBy: { column: 'name', order: 'asc' } });
-                    if (error) {
-                        console.warn('List error:', error);
-                        break;
-                    }
-                    if (!data || data.length === 0) break;
-                    all.push(...data);
-                    if (data.length < pageSize) break;
-                    offset += pageSize;
-                    if (offset > 5000) break; // safety limit
-                }
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                // Beri waktu browser untuk memproses download sebelum revoke
+                setTimeout(() => {
+                    try { URL.revokeObjectURL(url); } catch (e) {}
+                }, 8000);
+                return true;
             } catch (e) {
-                console.warn('List exception:', e);
+                console.error('Download blob gagal:', e);
+                return false;
             }
-            return all;
         }
 
         /**
-         * Cari nama file yang cocok dengan pola `{baseName}_{TYPE}.webm`
-         * dengan pencocokan case-insensitive. Return nama file asli atau null.
+         * Bersihkan subjectId untuk dijadikan nama file.
          */
-        function findVideoFile(allFiles, baseName, type) {
-            const targetUpper = `${baseName}_${type}.webm`.toUpperCase();
-            // 1. Exact case-sensitive
-            let f = allFiles.find(x => x.name === `${baseName}_${type}.webm`);
-            if (f) return f.name;
-            // 2. Case-insensitive exact
-            f = allFiles.find(x => x.name.toUpperCase() === targetUpper);
-            if (f) return f.name;
-            // 3. Ends with (fallback longgar)
-            f = allFiles.find(x => x.name.toUpperCase().endsWith(`_${type}.WEBM`)
-                              && x.name.toUpperCase().includes(baseName.toUpperCase()));
-            if (f) return f.name;
-            return null;
+        function sanitizeForFilename(str) {
+            if (!str) return 'Unknown';
+            return String(str).replace(/[^A-Za-z0-9_-]/g, '_');
         }
 
         /**
-         * Generate URL untuk file yang ADA.
-         * Coba signed URL dulu (works untuk private bucket),
-         * fallback ke public URL (works kalau bucket public).
+         * Download backup log sebagai JSON (fallback jika DB gagal).
          */
-        async function getUrlForFile(filename) {
-            if (!filename) return { url: null, mode: null };
-            // 1. Signed
+        function downloadLogBackupJSON(subjectId) {
             try {
-                const { data: signed, error: se } = await _supabase.storage
-                    .from(VIDEO_BUCKET).createSignedUrl(filename, 3600);
-                if (!se && signed?.signedUrl) {
-                    return { url: signed.signedUrl, mode: 'signed' };
+                const safeId = sanitizeForFilename(subjectId);
+                const ts = globalVideoRecordId || new Date().toISOString().replace(/[:.]/g, '-');
+                const hand = document.getElementById('hand-selection').value;
+
+                const exportData = {
+                    schema_version: "1.0",
+                    exported_at: new Date().toISOString(),
+                    subject_id: subjectId,
+                    hand: hand,
+                    trial_mode: currentTrialModeLabel,
+                    movement_mode: currentMovementModeLabel,
+                    movement_list: currentMovementList,
+                    experiment_timestamp: globalExperimentTimestamp,
+                    video_record_id: globalVideoRecordId,
+                    sessions: experimentData.map(d => ({
+                        session_label: d.sessionDef.label,
+                        session_movement: d.sessionDef.movement,
+                        session_movement_index: d.sessionDef.movementIndex + 1,
+                        session_phase: d.sessionDef.phase,
+                        session_mode: d.sessionDef.mode,
+                        session_start_relative: d.startTime,
+                        session_end_relative: d.endTime,
+                        trials: d.logs
+                    }))
+                };
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const filename = `${safeId}_${ts}_LOG_BACKUP.json`;
+                if (downloadBlob(blob, filename)) {
+                    addLog(`💾 Log backup JSON terunduh: ${filename}`, 'success');
+                    return true;
                 }
-            } catch (e) {}
-            // 2. Public
+                return false;
+            } catch (e) {
+                addLog('❌ Gagal membuat JSON backup: ' + e.message, 'error');
+                return false;
+            }
+        }
+
+        /**
+         * Download backup log sebagai CSV (fallback tambahan).
+         */
+        function downloadLogBackupCSV(subjectId) {
             try {
-                const { data: pub } = _supabase.storage
-                    .from(VIDEO_BUCKET).getPublicUrl(filename);
-                if (pub?.publicUrl) return { url: pub.publicUrl, mode: 'public' };
-            } catch (e) {}
-            return { url: null, mode: null };
+                const safeId = sanitizeForFilename(subjectId);
+                const ts = globalVideoRecordId || new Date().toISOString().replace(/[:.]/g, '-');
+                const hand = document.getElementById('hand-selection').value;
+
+                const headers = [
+                    "SubjectID","Hand","SessionMovement","MovementIndex",
+                    "Session","SessionPhase","Mode_MI_ME",
+                    "TrialMode","MovementMode","MovementList",
+                    "Trial","Instruction",
+                    "Flexion_ms","Flexion_str","Hold_ms","Hold_str",
+                    "Extension_ms","Extension_str","RealTimestamp",
+                    "SessionStart_Relative","SessionEnd_Relative",
+                    "VideoRecordID","SessionStartTimestamp"
+                ];
+                const esc = (v) => {
+                    if (v === null || v === undefined) return '""';
+                    return `"${String(v).replace(/"/g, '""')}"`;
+                };
+
+                const rows = [headers.join(",")];
+                const movementListStr = currentMovementList.join(" | ");
+
+                experimentData.forEach(session => {
+                    (session.logs || []).forEach(trial => {
+                        rows.push([
+                            esc(subjectId), esc(hand),
+                            esc(session.sessionDef.movement || ""),
+                            esc(session.sessionDef.movementIndex + 1),
+                            esc(session.sessionDef.label),
+                            esc(session.sessionDef.phase),
+                            esc(session.sessionDef.mode),
+                            esc(currentTrialModeLabel), esc(currentMovementModeLabel),
+                            esc(movementListStr),
+                            esc(trial.trial), esc(trial.instruction),
+                            esc(trial.flexion_ms), esc(trial.flexion_str),
+                            esc(trial.hold_ms), esc(trial.hold_str),
+                            esc(trial.extension_ms), esc(trial.extension_str),
+                            esc(trial.start_time),
+                            esc(session.startTime), esc(session.endTime),
+                            esc(globalVideoRecordId), esc(globalExperimentTimestamp)
+                        ].join(","));
+                    });
+                });
+
+                const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                const filename = `${safeId}_${ts}_LOG_BACKUP.csv`;
+                if (downloadBlob(blob, filename)) {
+                    addLog(`💾 Log backup CSV terunduh: ${filename}`, 'success');
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                addLog('❌ Gagal membuat CSV backup: ' + e.message, 'error');
+                return false;
+            }
         }
 
         // ==================== PREVIEW MODE ====================
@@ -957,37 +1024,86 @@
             document.querySelectorAll('.rec-status').forEach(el => el.style.display = 'none');
         }
 
+        // ============ UPLOAD DENGAN AUTO-DOWNLOAD FALLBACK ============
         async function processAndUploadVideos(subjectId) {
-            if (!_supabase) {
-                addLog("❌ Supabase tidak tersedia. Upload video dibatalkan.", 'error');
-                return;
-            }
             const timestamp = globalVideoRecordId;
             const uploadIndicator = document.getElementById('upload-status');
             uploadIndicator.classList.remove('hidden');
             uploadIndicator.classList.add('flex');
             addLog(`⏳ Mengompres dan mengunggah video...`, 'warning');
 
+            const safeSubjectId = sanitizeForFilename(subjectId);
+            const failedFiles = []; // menyimpan file yang gagal diunggah untuk diunduh lokal
             const uploadTasks = [];
+
             for (const type of ['face', 'body', 'screen']) {
                 if (recordedChunks[type].length > 0) {
                     const blob = new Blob(recordedChunks[type], { type: 'video/webm' });
-                    const filename = `${subjectId}_${timestamp}_${type.toUpperCase()}.webm`;
+                    const filename = `${safeSubjectId}_${timestamp}_${type.toUpperCase()}.webm`;
                     addLog(`📤 Uploading ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)...`);
 
-                    const task = _supabase.storage.from(VIDEO_BUCKET).upload(filename, blob, {
-                        cacheControl: '3600', upsert: false
-                    }).then(({ error }) => {
-                        if (error) addLog(`❌ Gagal unggah ${filename}: ${error.message}`, 'error');
-                        else addLog(`✅ Berhasil unggah: ${filename}`, 'success');
-                    });
+                    const task = (async () => {
+                        if (!_supabase) {
+                            failedFiles.push({
+                                type, blob, filename,
+                                reason: 'Supabase tidak tersedia'
+                            });
+                            addLog(`❌ Supabase tidak tersedia — ${type.toUpperCase()} akan diunduh ke perangkat`, 'error');
+                            return;
+                        }
+                        try {
+                            const { error } = await _supabase.storage
+                                .from(VIDEO_BUCKET)
+                                .upload(filename, blob, {
+                                    cacheControl: '3600',
+                                    upsert: false
+                                });
+                            if (error) {
+                                failedFiles.push({
+                                    type, blob, filename,
+                                    reason: error.message || 'Unknown error'
+                                });
+                                addLog(`❌ Gagal unggah ${filename}: ${error.message}`, 'error');
+                            } else {
+                                addLog(`✅ Berhasil unggah: ${filename}`, 'success');
+                            }
+                        } catch (e) {
+                            failedFiles.push({
+                                type, blob, filename,
+                                reason: e.message || 'Exception saat upload'
+                            });
+                            addLog(`❌ Error unggah ${filename}: ${e.message}`, 'error');
+                        }
+                    })();
                     uploadTasks.push(task);
                 }
             }
+
             await Promise.all(uploadTasks);
+
             uploadIndicator.classList.add('hidden');
             uploadIndicator.classList.remove('flex');
-            addLog(`🎉 Semua file media selesai diproses.`, 'success');
+
+            // ==== FALLBACK: Auto-download file yang gagal ====
+            if (failedFiles.length > 0) {
+                addLog(`⬇️ ${failedFiles.length} video gagal diunggah ke Supabase. Mengunduh ke perangkat lokal...`, 'warning');
+                for (let i = 0; i < failedFiles.length; i++) {
+                    const f = failedFiles[i];
+                    const ok = downloadBlob(f.blob, f.filename);
+                    if (ok) {
+                        addLog(`💾 [${i + 1}/${failedFiles.length}] Terunduh ke Downloads: ${f.filename}`, 'success');
+                    } else {
+                        addLog(`❌ [${i + 1}/${failedFiles.length}] Gagal unduh lokal: ${f.filename}`, 'error');
+                    }
+                    // Beri jeda antar download agar browser tidak memblokir multiple download
+                    if (i < failedFiles.length - 1) {
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                }
+                addLog(`🎉 ${failedFiles.length} file video tersimpan di folder Downloads perangkat ini.`, 'success');
+            } else {
+                addLog(`🎉 Semua file media selesai diproses.`, 'success');
+            }
         }
 
         // ==================== EXPERIMENT ENGINE ====================
@@ -1454,43 +1570,64 @@
             }
         });
 
-        // ==================== DATABASE ====================
+        // ============ DATABASE SAVE DENGAN AUTO-BACKUP ============
         async function saveAllDataToDB(subjectId, hand) {
-            if (!_supabase) {
-                addLog("❌ Supabase tidak tersedia. Simpan log dibatalkan.", 'error');
-                return;
-            }
-            addLog("⏳ Menyimpan log timeline ke Database...", "warning");
-            try {
-                for (const data of experimentData) {
-                    const payload = {
-                        subject_id: subjectId,
-                        hand: hand,
-                        session_type: data.sessionDef.label,
-                        mode: data.sessionDef.mode,
-                        session_start_relative: data.startTime,
-                        session_end_relative: data.endTime,
-                        session_start_timestamp: globalExperimentTimestamp,
-                        video_record_id: globalVideoRecordId,
-                        trial_mode: currentTrialModeLabel,
-                        movement_mode: currentMovementModeLabel,
-                        movement_count: currentMovementList.length,
-                        movement_list: currentMovementList,
-                        session_movement: data.sessionDef.movement,
-                        session_movement_index: data.sessionDef.movementIndex + 1,
-                        session_phase: data.sessionDef.phase,
-                        trials_data: data.logs
-                    };
+            let dbFailed = false;
+            let dbErrorMessage = '';
 
-                    const { error } = await _supabase.from('experiment_sessions').insert(payload);
-                    if (error) {
-                        console.error("Supabase Error:", error);
-                        throw new Error(error.message || "Gagal insert");
+            if (!_supabase) {
+                dbFailed = true;
+                dbErrorMessage = 'Supabase tidak tersedia';
+                addLog("❌ Supabase tidak tersedia. Simpan log ke DB dibatalkan.", 'error');
+            } else {
+                addLog("⏳ Menyimpan log timeline ke Database...", "warning");
+                try {
+                    for (const data of experimentData) {
+                        const payload = {
+                            subject_id: subjectId,
+                            hand: hand,
+                            session_type: data.sessionDef.label,
+                            mode: data.sessionDef.mode,
+                            session_start_relative: data.startTime,
+                            session_end_relative: data.endTime,
+                            session_start_timestamp: globalExperimentTimestamp,
+                            video_record_id: globalVideoRecordId,
+                            trial_mode: currentTrialModeLabel,
+                            movement_mode: currentMovementModeLabel,
+                            movement_count: currentMovementList.length,
+                            movement_list: currentMovementList,
+                            session_movement: data.sessionDef.movement,
+                            session_movement_index: data.sessionDef.movementIndex + 1,
+                            session_phase: data.sessionDef.phase,
+                            trials_data: data.logs
+                        };
+
+                        const { error } = await _supabase.from('experiment_sessions').insert(payload);
+                        if (error) {
+                            console.error("Supabase Error:", error);
+                            throw new Error(error.message || "Gagal insert");
+                        }
                     }
+                    addLog("✅ Log timeline berhasil diamankan di Database.", "success");
+                } catch (err) {
+                    dbFailed = true;
+                    dbErrorMessage = err.message;
+                    addLog("❌ Gagal menyimpan log ke Database: " + err.message, "error");
                 }
-                addLog("✅ Log timeline berhasil diamankan.", "success");
-            } catch (err) {
-                addLog("❌ Gagal menyimpan log: " + err.message, "error");
+            }
+
+            // ==== FALLBACK: Auto-download log sebagai file backup ====
+            if (dbFailed) {
+                addLog(`⬇️ Menyimpan log sebagai file backup ke perangkat (alasan: ${dbErrorMessage})...`, 'warning');
+                const okJson = downloadLogBackupJSON(subjectId);
+                await new Promise(r => setTimeout(r, 500));
+                const okCsv = downloadLogBackupCSV(subjectId);
+
+                if (okJson || okCsv) {
+                    addLog("🎉 Log data tersimpan di folder Downloads sebagai backup.", 'success');
+                } else {
+                    addLog("❌ GAGAL menyimpan log ke DB DAN GAGAL download backup. Harap screenshot log ini!", 'error');
+                }
             }
         }
 
@@ -1557,18 +1694,69 @@
             }
         }
 
-        // ============ VIEW SESSION DETAIL (FIXED: ROBUST VIDEO RESOLVER) ============
+        // ============ ROBUST VIDEO RESOLVER ============
+        async function listAllVideoFiles() {
+            const all = [];
+            const pageSize = 100;
+            let offset = 0;
+            try {
+                while (true) {
+                    const { data, error } = await _supabase.storage
+                        .from(VIDEO_BUCKET)
+                        .list('', { limit: pageSize, offset, sortBy: { column: 'name', order: 'asc' } });
+                    if (error) {
+                        console.warn('List error:', error);
+                        break;
+                    }
+                    if (!data || data.length === 0) break;
+                    all.push(...data);
+                    if (data.length < pageSize) break;
+                    offset += pageSize;
+                    if (offset > 5000) break;
+                }
+            } catch (e) {
+                console.warn('List exception:', e);
+            }
+            return all;
+        }
+
+        function findVideoFile(allFiles, baseName, type) {
+            const targetUpper = `${baseName}_${type}.webm`.toUpperCase();
+            let f = allFiles.find(x => x.name === `${baseName}_${type}.webm`);
+            if (f) return f.name;
+            f = allFiles.find(x => x.name.toUpperCase() === targetUpper);
+            if (f) return f.name;
+            f = allFiles.find(x => x.name.toUpperCase().endsWith(`_${type}.WEBM`)
+                              && x.name.toUpperCase().includes(baseName.toUpperCase()));
+            if (f) return f.name;
+            return null;
+        }
+
+        async function getUrlForFile(filename) {
+            if (!filename) return { url: null, mode: null };
+            try {
+                const { data: signed, error: se } = await _supabase.storage
+                    .from(VIDEO_BUCKET).createSignedUrl(filename, 3600);
+                if (!se && signed?.signedUrl) {
+                    return { url: signed.signedUrl, mode: 'signed' };
+                }
+            } catch (e) {}
+            try {
+                const { data: pub } = _supabase.storage
+                    .from(VIDEO_BUCKET).getPublicUrl(filename);
+                if (pub?.publicUrl) return { url: pub.publicUrl, mode: 'public' };
+            } catch (e) {}
+            return { url: null, mode: null };
+        }
+
         window.viewSessionDetail = async function(id) {
             try {
                 const { data, error } = await _supabase.from('experiment_sessions').select('*').eq('id', id).single();
                 if (error) throw error;
 
-                // ==== Rekonstruksi base filename ====
                 let fileTimestamp = data.video_record_id;
                 if (!fileTimestamp && data.session_start_timestamp) {
                     try {
-                        const t = new Date(data.session_start_timestamp);
-                        // Jika timestamp tidak punya 'Z' (data lama), tambah
                         const isoTs = data.session_start_timestamp.endsWith('Z')
                             ? data.session_start_timestamp
                             : data.session_start_timestamp + 'Z';
@@ -1578,26 +1766,22 @@
                     }
                 }
 
-                const baseFilename = `${data.subject_id}_${fileTimestamp}`;
+                const safeSubjectId = sanitizeForFilename(data.subject_id);
+                const baseFilename = `${safeSubjectId}_${fileTimestamp}`;
                 console.log(`🎥 [Detail] Looking for base: "${baseFilename}"`);
 
-                // ==== STEP 1: Ambil semua file di bucket ====
                 const allFiles = await listAllVideoFiles();
                 console.log(`📁 [Detail] Total files in bucket: ${allFiles.length}`);
 
-                // ==== STEP 2: Cocokkan file per tipe ====
                 const faceFile   = findVideoFile(allFiles, baseFilename, 'FACE');
                 const bodyFile   = findVideoFile(allFiles, baseFilename, 'BODY');
                 const screenFile = findVideoFile(allFiles, baseFilename, 'SCREEN');
                 console.log(`🔍 [Detail] Matched: FACE=${faceFile}, BODY=${bodyFile}, SCREEN=${screenFile}`);
 
-                // ==== STEP 3: Ambil URL ====
                 const faceRes   = await getUrlForFile(faceFile);
                 const bodyRes   = await getUrlForFile(bodyFile);
                 const screenRes = await getUrlForFile(screenFile);
-                console.log(`🔗 [Detail] URLs:`, { face: faceRes, body: bodyRes, screen: screenRes });
 
-                // ==== STEP 4: Bangun HTML link video ====
                 const videoLinksHtml = `
                     <div class="flex gap-3 flex-wrap">
                         ${faceRes.url
@@ -1612,7 +1796,6 @@
                     </div>
                 `;
 
-                // ==== STEP 5: Diagnostik jika ada yang N/A ====
                 let diagnosticHtml = '';
                 const missingCount = [faceFile, bodyFile, screenFile].filter(x => !x).length;
                 if (missingCount > 0) {
