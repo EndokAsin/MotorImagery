@@ -51,11 +51,13 @@
     <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center shadow-lg z-20">
         <div>
             <h1 class="text-xl font-bold text-blue-400">🧠 NeuroLab Controller</h1>
-            
         </div>
         <div class="flex items-center gap-4">
             <div id="demo-badge" class="hidden px-3 py-1 bg-orange-900/60 text-orange-300 rounded text-xs font-bold border-2 border-orange-500 demo-pulse">
                 🎬 DEMO MODE
+            </div>
+            <div id="rec-mode-badge" class="hidden px-3 py-1 rounded text-xs font-bold border-2">
+                💾 DISK MODE
             </div>
             <div id="upload-status" class="hidden items-center gap-2 text-yellow-400 font-bold bg-yellow-900/30 px-4 py-2 rounded-lg border border-yellow-700">
                 <svg class="animate-spin h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -245,7 +247,7 @@
                 <span class="inline-flex items-center gap-1"><span class="bg-teal-600 text-white px-2 py-0.5 rounded text-xs font-bold">📥 CSV</span> = unduh 1 sesi</span>
                 <span class="inline-flex items-center gap-1"><span class="bg-cyan-600 text-white px-2 py-0.5 rounded text-xs font-bold">📦 CSV</span> = unduh semua sesi responden</span>
                 <span class="inline-flex items-center gap-1"><span class="bg-red-600 text-white px-2 py-0.5 rounded text-xs font-bold">Hapus</span> = hapus sesi</span>
-                <span class="ml-auto text-yellow-400 font-bold">📹 Video: tersimpan di folder Downloads PC</span>
+                <span class="ml-auto text-yellow-400 font-bold">📹 Video: tersimpan di folder yang dipilih saat mulai</span>
             </div>
 
             <div class="bg-slate-800 rounded-lg shadow-xl border border-slate-700 overflow-hidden">
@@ -311,7 +313,6 @@
         // ==================== SUPABASE CONFIG ====================
         const SUPABASE_URL = 'https://rkekwnmwuybxzmbptcwh.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_5p4UmkOLs41OWf97B-He4g_A2MRqC7T';
-        const VIDEO_BUCKET = 'video'; // masih dipakai untuk mode READ (kalau ada file lama di bucket)
 
         let _supabase = null;
         try {
@@ -348,6 +349,13 @@
         let streams = { face: null, body: null, screen: null };
         let recorders = { face: null, body: null, screen: null };
         let recordedChunks = { face: [], body: [], screen: [] };
+
+        // ==================== FILE SYSTEM ACCESS API STATE ====================
+        let diskRecordingEnabled = false;
+        let fileWriters = { face: null, body: null, screen: null };
+        let lastWritePromise = { face: Promise.resolve(), body: Promise.resolve(), screen: Promise.resolve() };
+        let currentMimeInfo = { mime: '', ext: 'webm' };
+        const VIDEO_BITRATE = 800000; // 800 kbps — aman karena tidak ada batas RAM
 
         let currentDetailSessionId = null;
 
@@ -972,55 +980,178 @@
             });
         });
 
+        // ==================== MIME DETECTION ====================
+        function getBestMimeType() {
+            const candidates = [
+                { mime: 'video/mp4; codecs=h264', ext: 'mp4' },
+                { mime: 'video/mp4; codecs=avc1', ext: 'mp4' },
+                { mime: 'video/mp4', ext: 'mp4' },
+                { mime: 'video/webm; codecs=vp9', ext: 'webm' },
+                { mime: 'video/webm; codecs=vp8', ext: 'webm' },
+                { mime: 'video/webm', ext: 'webm' }
+            ];
+            for (const c of candidates) {
+                try {
+                    if (MediaRecorder.isTypeSupported(c.mime)) return c;
+                } catch (e) {}
+            }
+            return { mime: '', ext: 'webm' };
+        }
+
+        // ==================== DISK WRITERS (File System Access API) ====================
+        async function setupDiskWriters(subjectId, timestamp) {
+            // Reset state dulu
+            diskRecordingEnabled = false;
+            fileWriters = { face: null, body: null, screen: null };
+            lastWritePromise = { face: Promise.resolve(), body: Promise.resolve(), screen: Promise.resolve() };
+
+            if (typeof window.showDirectoryPicker !== 'function') {
+                addLog('⚠️ Browser tidak mendukung File System Access API (butuh Chrome/Edge 86+).', 'warning');
+                addLog('⚠️ Fallback ke mode memori — batasi durasi eksperimen < 30 menit!', 'warning');
+                currentMimeInfo = getBestMimeType();
+                return 'unsupported';
+            }
+
+            try {
+                addLog('📁 Silakan pilih FOLDER untuk menyimpan video...', 'info');
+                const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+
+                currentMimeInfo = getBestMimeType();
+                addLog(`🎞️ Format video terbaik: ${currentMimeInfo.mime || 'default'} (.${currentMimeInfo.ext})`, 'info');
+
+                const ext = currentMimeInfo.ext;
+                for (const type of ['face', 'body', 'screen']) {
+                    if (!streams[type]) continue;
+                    const filename = `${subjectId}_${timestamp}_${type.toUpperCase()}.${ext}`;
+                    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                    fileWriters[type] = await fileHandle.createWritable();
+                    lastWritePromise[type] = Promise.resolve();
+                    addLog(`✅ File disiapkan: ${filename}`, 'success');
+                }
+
+                diskRecordingEnabled = true;
+                addLog(`💾 DISK MODE AKTIF — Video ditulis langsung ke folder. Aman untuk durasi panjang (>50 menit).`, 'success');
+                return 'ok';
+
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    addLog('❌ Pemilihan folder dibatalkan oleh user.', 'error');
+                    return 'cancelled';
+                }
+                addLog('❌ Error setup folder: ' + err.message, 'error');
+                return 'error';
+            }
+        }
+
         // ==================== RECORDING ====================
         function startRecordingStreams() {
             recordedChunks = { face: [], body: [], screen: [] };
-            const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp8') ? 'video/webm; codecs=vp8' : 'video/webm';
-            const options = { mimeType, videoBitsPerSecond: 250000 };
+
+            const mimeType = currentMimeInfo.mime ||
+                (MediaRecorder.isTypeSupported('video/webm; codecs=vp8') ? 'video/webm; codecs=vp8' : 'video/webm');
+            const options = { videoBitsPerSecond: VIDEO_BITRATE };
+            if (mimeType) options.mimeType = mimeType;
 
             ['face', 'body', 'screen'].forEach(type => {
-                if (streams[type]) {
-                    try {
-                        const recorder = new MediaRecorder(streams[type], options);
-                        recorder.ondataavailable = e => {
-                            if (e.data && e.data.size > 0) recordedChunks[type].push(e.data);
-                        };
-                        recorder.start(1000);
-                        recorders[type] = recorder;
-                        addLog(`⏺️ Recording dimulai untuk ${type.toUpperCase()}`);
-                    } catch (e) {
-                        addLog(`❌ Gagal memulai rekaman ${type}: ${e.message}`, 'error');
-                    }
+                if (!streams[type]) return;
+
+                try {
+                    const recorder = new MediaRecorder(streams[type], options);
+
+                    recorder.ondataavailable = (e) => {
+                        if (!e.data || e.data.size === 0) return;
+
+                        if (diskRecordingEnabled && fileWriters[type]) {
+                            // Streaming langsung ke disk — tidak menumpuk di RAM
+                            const writer = fileWriters[type];
+                            lastWritePromise[type] = lastWritePromise[type].then(async () => {
+                                try {
+                                    await writer.write(e.data);
+                                } catch (err) {
+                                    console.error(`[${type}] Write error:`, err);
+                                }
+                            });
+                        } else {
+                            // Fallback: tahan di memori
+                            recordedChunks[type].push(e.data);
+                        }
+                    };
+
+                    recorder.onerror = (e) => {
+                        addLog(`❌ Recorder error ${type.toUpperCase()}: ${e.error?.message || 'unknown'}`, 'error');
+                    };
+
+                    recorder.start(1000);
+                    recorders[type] = recorder;
+                    addLog(`⏺️ Recording dimulai: ${type.toUpperCase()} (${diskRecordingEnabled ? 'DISK' : 'MEMORI'})`);
+                } catch (e) {
+                    addLog(`❌ Gagal memulai rekaman ${type}: ${e.message}`, 'error');
                 }
             });
             document.querySelectorAll('.rec-status').forEach(el => el.style.display = 'block');
         }
 
-        function stopRecordingStreams() {
-            ['face', 'body', 'screen'].forEach(type => {
-                if (recorders[type] && recorders[type].state !== "inactive") {
-                    recorders[type].stop();
-                    addLog(`⏹️ Recording berhenti untuk ${type.toUpperCase()}`);
+        async function stopRecordingStreams() {
+            // 1. Stop semua recorder & tunggu event onstop
+            await Promise.all(['face', 'body', 'screen'].map(type => {
+                return new Promise(resolve => {
+                    if (recorders[type] && recorders[type].state !== 'inactive') {
+                        recorders[type].onstop = () => {
+                            addLog(`⏹️ Recording berhenti: ${type.toUpperCase()}`);
+                            resolve();
+                        };
+                        try { recorders[type].stop(); } catch (e) { resolve(); }
+                    } else {
+                        resolve();
+                    }
+                });
+            }));
+
+            // 2. Tunggu semua pending write selesai
+            await Promise.all(['face', 'body', 'screen'].map(type => lastWritePromise[type]));
+
+            // 3. Tutup file writer (hanya di disk mode)
+            if (diskRecordingEnabled) {
+                for (const type of ['face', 'body', 'screen']) {
+                    if (fileWriters[type]) {
+                        try {
+                            await fileWriters[type].close();
+                            addLog(`✅ File ${type.toUpperCase()} selesai ditulis ke disk`, 'success');
+                        } catch (err) {
+                            addLog(`❌ Gagal finalisasi file ${type}: ${err.message}`, 'error');
+                        }
+                        fileWriters[type] = null;
+                    }
                 }
-            });
+            }
+
             document.querySelectorAll('.rec-status').forEach(el => el.style.display = 'none');
         }
 
-        // ============ DOWNLOAD VIDEO KE PC (TANPA UPLOAD SUPABASE) ============
+        // ============ PROSES VIDEO (skip kalau disk mode) ============
         async function processAndUploadVideos(subjectId) {
+            // Disk mode: video sudah tersimpan, tidak perlu download blob
+            if (diskRecordingEnabled) {
+                addLog(`✅ Video sudah tersimpan langsung di folder yang dipilih. Tidak perlu download.`, 'success');
+                return;
+            }
+
+            // Fallback: mode memori lama
             const timestamp = globalVideoRecordId;
             const uploadIndicator = document.getElementById('upload-status');
             uploadIndicator.classList.remove('hidden');
             uploadIndicator.classList.add('flex');
-            addLog(`⏳ Memproses video untuk diunduh ke PC...`, 'warning');
+            addLog(`⏳ Memproses video untuk diunduh ke PC (MODE MEMORI)...`, 'warning');
 
             const safeSubjectId = sanitizeForFilename(subjectId);
+            const ext = currentMimeInfo.ext || 'webm';
+            const mimeForBlob = ext === 'mp4' ? 'video/mp4' : 'video/webm';
             const toDownload = [];
 
             for (const type of ['face', 'body', 'screen']) {
                 if (recordedChunks[type].length > 0) {
-                    const blob = new Blob(recordedChunks[type], { type: 'video/webm' });
-                    const filename = `${safeSubjectId}_${timestamp}_${type.toUpperCase()}.webm`;
+                    const blob = new Blob(recordedChunks[type], { type: mimeForBlob });
+                    const filename = `${safeSubjectId}_${timestamp}_${type.toUpperCase()}.${ext}`;
                     toDownload.push({ type, blob, filename });
                 }
             }
@@ -1046,7 +1177,6 @@
                     addLog(`❌ [${i + 1}/${toDownload.length}] Gagal unduh: ${f.filename}`, 'error');
                 }
 
-                // Jeda antar download supaya browser tidak memblokir multiple download
                 if (i < toDownload.length - 1) {
                     await new Promise(r => setTimeout(r, 500));
                 }
@@ -1095,7 +1225,7 @@
 
             if (!wasDemo) {
                 stopGlobalTimer();
-                stopRecordingStreams();
+                await stopRecordingStreams();
             }
             setPhase('finished');
 
@@ -1104,6 +1234,7 @@
             btnStartExp.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
             document.getElementById('btn-emergency-stop').classList.add('hidden');
             document.getElementById('demo-badge').classList.add('hidden');
+            document.getElementById('rec-mode-badge').classList.add('hidden');
 
             if (wasDemo) {
                 addLog("🎬 DEMO MODE dihentikan — tidak ada data yang disimpan.", 'demo');
@@ -1120,6 +1251,7 @@
             await processAndUploadVideos(subjectId);
             await saveAllDataToDB(subjectId, hand);
 
+            diskRecordingEnabled = false;
             checkReadyToStart();
         });
 
@@ -1264,6 +1396,23 @@
             if (!subjectId) { alert("Masukkan ID Partisipan!"); return; }
             if (!isDisplayOpen()) { alert("Buka jendela eksperimen!"); checkReadyToStart(); return; }
 
+            // Generate timestamp SEBELUM setup folder
+            const expTimestamp = new Date().toISOString();
+            const videoRecordId = expTimestamp.replace(/[:.]/g, '-');
+            const safeSubjectId = sanitizeForFilename(subjectId);
+
+            // === SETUP DISK WRITERS (dalam user gesture) ===
+            const setupResult = await setupDiskWriters(safeSubjectId, videoRecordId);
+            if (setupResult === 'cancelled') {
+                addLog('❌ Eksperimen dibatalkan (folder tidak dipilih).', 'error');
+                return;
+            }
+            if (setupResult === 'error') {
+                if (!confirm('⚠️ Setup folder gagal. Lanjutkan dengan mode memori (batas ~30 menit)?')) {
+                    return;
+                }
+            }
+
             const expMode = document.getElementById('exp-mode-selection').value;
             const trialMode = document.getElementById('trial-mode-selection').value;
             const movementMode = document.getElementById('movement-mode-selection').value;
@@ -1285,8 +1434,19 @@
             document.getElementById('btn-emergency-stop').classList.remove('hidden');
             experimentData = [];
 
-            globalExperimentTimestamp = new Date().toISOString();
-            globalVideoRecordId = globalExperimentTimestamp.replace(/[:.]/g, '-');
+            globalExperimentTimestamp = expTimestamp;
+            globalVideoRecordId = videoRecordId;
+
+            // Tampilkan badge mode rekaman
+            const recBadge = document.getElementById('rec-mode-badge');
+            recBadge.classList.remove('hidden');
+            if (diskRecordingEnabled) {
+                recBadge.className = "px-3 py-1 rounded text-xs font-bold border-2 bg-emerald-900/60 text-emerald-300 border-emerald-500";
+                recBadge.innerText = "💾 DISK MODE";
+            } else {
+                recBadge.className = "px-3 py-1 rounded text-xs font-bold border-2 bg-yellow-900/60 text-yellow-300 border-yellow-500";
+                recBadge.innerText = "⚠️ MEMORY MODE";
+            }
 
             startGlobalTimer();
             startRecordingStreams();
@@ -1296,7 +1456,7 @@
                 addLog(`📋 Movement Mode: ${currentMovementModeLabel}`, 'info');
                 addLog(`📋 Total Gerakan: ${currentMovementList.length}`, 'info');
                 addLog(`📋 Siklus per trial: BERSIAP(2s) → Flexion(2s) → Hold(2s) → Extension(2s) → Rest(5s)`, 'info');
-                addLog(`📋 Video akan diunduh ke PC setelah sesi selesai`, 'info');
+                addLog(`📋 Bitrate: ${VIDEO_BITRATE/1000} kbps | Format: .${currentMimeInfo.ext}`, 'info');
 
                 addLog("Mempersiapkan baseline (5 detik)...");
                 setPhase('standby');
@@ -1505,9 +1665,10 @@
 
                 if(!forceStop) {
                     stopGlobalTimer();
-                    stopRecordingStreams();
+                    await stopRecordingStreams();
                     setPhase('finished');
                     document.getElementById('btn-emergency-stop').classList.add('hidden');
+                    document.getElementById('rec-mode-badge').classList.add('hidden');
                     btnStartExp.innerText = "EKSPERIMEN SELESAI";
 
                     addLog("🎉 SELURUH RANGKAIAN EKSPERIMEN SELESAI", 'success');
@@ -1515,6 +1676,7 @@
                     const hand = document.getElementById('hand-selection').value;
                     await processAndUploadVideos(subjectId);
                     await saveAllDataToDB(subjectId, hand);
+                    diskRecordingEnabled = false;
                 }
             } finally {
                 isExperimentRunning = false;
@@ -1780,21 +1942,20 @@
                 const { data, error } = await _supabase.from('experiment_sessions').select('*').eq('id', id).single();
                 if (error) throw error;
 
-                // Info video lokal
                 const safeSubjectId = sanitizeForFilename(data.subject_id);
                 const fileTimestamp = (data.video_record_id || '').replace(/[:.]/g, '-');
                 const baseFilename = `${safeSubjectId}_${fileTimestamp}`;
 
                 const videoInfoHtml = `
                     <div class="mt-3 p-3 bg-blue-950/40 border border-blue-700 rounded text-[11px] text-blue-200">
-                        <p class="font-bold mb-1">📹 Info Video (Tersimpan di PC Lokal)</p>
-                        <p class="text-slate-300 mb-2">File video tersimpan di folder <b>Downloads</b> PC tempat eksperimen dijalankan dengan nama:</p>
+                        <p class="font-bold mb-1">📹 Info Video</p>
+                        <p class="text-slate-300 mb-2">File video tersimpan di <b>folder yang dipilih saat mulai eksperimen</b>, dengan nama:</p>
                         <ul class="list-disc ml-5 mb-2 text-slate-200">
-                            <li><code>${escapeHtml(baseFilename)}_FACE.webm</code></li>
-                            <li><code>${escapeHtml(baseFilename)}_BODY.webm</code></li>
-                            <li><code>${escapeHtml(baseFilename)}_SCREEN.webm</code></li>
+                            <li><code>${escapeHtml(baseFilename)}_FACE.mp4/webm</code></li>
+                            <li><code>${escapeHtml(baseFilename)}_BODY.mp4/webm</code></li>
+                            <li><code>${escapeHtml(baseFilename)}_SCREEN.mp4/webm</code></li>
                         </ul>
-                        <p class="text-slate-400 italic">Cari manual di PC tersebut. Video tidak diunggah ke cloud.</p>
+                        <p class="text-slate-400 italic">Video tidak diunggah ke cloud.</p>
                     </div>
                 `;
 
