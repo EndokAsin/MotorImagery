@@ -553,6 +553,7 @@
             if (nextSession.phase === 'Utama'
                 && prevSession.phase === 'Latihan'
                 && nextSession.mode === prevSession.mode) return 'practice-to-main';
+            if (nextSession.mode !== prevSession.mode) return 'mode-change';   // ⬅️ TAMBAHAN
             return null;
         }
 
@@ -1593,7 +1594,13 @@
                                 pauseSubtitle = `Gerakan berikutnya: ${nextSession.movementInfo.displayName}`;
                                 btnLabel = `▶ LANJUT KE: ${nextSession.movementInfo.displayName}`;
                                 logMsg = `⏸️ PAUSE — Gerakan "${session.movementInfo.displayName}" selesai. Timer tetap jalan. Klik tombol Lanjut untuk ke "${nextSession.movementInfo.displayName}"`;
+                            } else if (pauseReason === 'mode-change') {
+                                pauseTitle = `✅ ${session.label}`;
+                                pauseSubtitle = `Sesi berikutnya: ${nextSession.label}`;
+                                btnLabel = `▶ LANJUT KE: ${nextSession.label}`;
+                                logMsg = `⏸️ JEDA GANTI MODE — "${session.label}" selesai. Klik tombol Lanjut untuk masuk ke "${nextSession.label}"`;
                             } else {
+                                // practice-to-main
                                 pauseTitle = `✅ ${session.label}`;
                                 pauseSubtitle = `Sesi berikutnya: ${nextSession.label}`;
                                 btnLabel = `▶ LANJUT KE: ${nextSession.label}`;
